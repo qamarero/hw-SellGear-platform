@@ -25,6 +25,7 @@ import {
   applyUpdateLine,
   findByCode,
   hasProduct,
+  isGiftLine,
   qtyByProduct,
   tabletGiftIndex,
   type CartLineState,
@@ -75,6 +76,103 @@ describe('applyAddProduct', () => {
     const next = applyAddProduct(items, tpv)
     expect(items[0].qty).toBe(1)
     expect(next).not.toBe(items)
+  })
+})
+
+// El regalo de Implementación Pro es UNA tablet. La segunda se cobra, así que
+// no puede sumarse a la línea regalada: hasta que esto se arregló, añadir otra
+// tablet desde el catálogo subía la del 100 % y se regalaban las dos.
+describe('applyAddProduct con la tablet ya regalada', () => {
+  const gift = () =>
+    line({
+      product_id: tablet.id,
+      qty: 1,
+      discount_pct: GIFT_DISCOUNT_PCT,
+      notes: TABLET_GIFT_NOTE,
+    })
+
+  it('la segunda tablet abre línea propia a precio normal', () => {
+    const next = applyAddProduct([gift()], tablet)
+
+    expect(next).toHaveLength(2)
+    expect(next[0]).toMatchObject({ qty: 1, discount_pct: GIFT_DISCOUNT_PCT })
+    expect(next[1]).toMatchObject({
+      product_id: tablet.id,
+      qty: 1,
+      discount_pct: 0,
+      notes: null,
+    })
+  })
+
+  it('la tercera suma en la línea de pago, no en la del regalo', () => {
+    const next = applyAddProduct(applyAddProduct([gift()], tablet), tablet)
+
+    expect(next).toHaveLength(2)
+    expect(next[0].qty).toBe(1)
+    expect(next[1].qty).toBe(2)
+  })
+
+  it('el regalo sigue intacto y sigue siendo localizable', () => {
+    const next = applyAddProduct([gift()], tablet)
+
+    expect(tabletGiftIndex(next, tablet)).toBe(0)
+    expect(next[0].notes).toBe(TABLET_GIFT_NOTE)
+  })
+
+  it('qtyByProduct cuenta las dos líneas', () => {
+    const next = applyAddProduct([gift()], tablet)
+    expect(qtyByProduct(next).get(tablet.id)).toBe(2)
+  })
+})
+
+describe('applyAdjustQty con regalo y línea de pago', () => {
+  const gift = () =>
+    line({
+      product_id: tablet.id,
+      qty: 1,
+      discount_pct: GIFT_DISCOUNT_PCT,
+      notes: TABLET_GIFT_NOTE,
+    })
+
+  it('resta de la línea de pago, no de la regalada', () => {
+    const items = [gift(), line({ product_id: tablet.id, qty: 2 })]
+    const next = applyAdjustQty(items, tablet.id, -1)
+
+    expect(next[0].qty).toBe(1)
+    expect(next[1].qty).toBe(1)
+  })
+
+  it('al agotar la línea de pago el regalo se queda', () => {
+    const items = [gift(), line({ product_id: tablet.id, qty: 1 })]
+    const next = applyAdjustQty(items, tablet.id, -1)
+
+    expect(next).toHaveLength(1)
+    expect(next[0].discount_pct).toBe(GIFT_DISCOUNT_PCT)
+  })
+
+  it('restar con solo el regalo lo retira', () => {
+    expect(applyAdjustQty([gift()], tablet.id, -1)).toHaveLength(0)
+  })
+
+  it('sumar sobre el regalo no hace nada: esa unidad la crea applyAddProduct', () => {
+    const items = [gift()]
+    expect(applyAdjustQty(items, tablet.id, 1)).toBe(items)
+  })
+
+  it('sumar va a la línea de pago cuando existe', () => {
+    const items = [gift(), line({ product_id: tablet.id, qty: 1 })]
+    const next = applyAdjustQty(items, tablet.id, 1)
+
+    expect(next[0].qty).toBe(1)
+    expect(next[1].qty).toBe(2)
+  })
+})
+
+describe('isGiftLine', () => {
+  it('marca solo el 100 % de descuento', () => {
+    expect(isGiftLine(line({ discount_pct: GIFT_DISCOUNT_PCT }))).toBe(true)
+    expect(isGiftLine(line({ discount_pct: 99 }))).toBe(false)
+    expect(isGiftLine(line({ discount_pct: 0 }))).toBe(false)
   })
 })
 

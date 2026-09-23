@@ -173,7 +173,7 @@ export default function Step2Catalog({
         }
         visibleTabs={PENINSULA_TABS}
         onAdd={(p) => onItemsChange(applyAddProduct(items, p))}
-        onInc={(p) => onItemsChange(applyAdjustQty(items, p.id, 1))}
+        onInc={(p) => onItemsChange(applyAddProduct(items, p))}
         onDec={(p) => {
           const next = applyAdjustQty(items, p.id, -1, { implPro, tablet })
           if (implPro && p.id === implPro.id) setGiftDeclined(false)
@@ -369,7 +369,7 @@ export default function Step2Catalog({
           qty={qtyMap.get(detailProduct.id) ?? 0}
           onClose={() => setDetailProduct(null)}
           onAdd={(p) => onItemsChange(applyAddProduct(items, p))}
-          onInc={(p) => onItemsChange(applyAdjustQty(items, p.id, 1))}
+          onInc={(p) => onItemsChange(applyAddProduct(items, p))}
           onDec={(p) =>
             onItemsChange(applyAdjustQty(items, p.id, -1, { implPro, tablet }))
           }

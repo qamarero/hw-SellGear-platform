@@ -173,8 +173,11 @@ export default function CartFab({
                   </div>
 
                   {/* Solo las líneas de catálogo llevan stepper: las libres se
-                      editan en su propio bloque, con descripción y precio. */}
-                  {d.product && !isFreePrice(d.product) ? (
+                      editan en su propio bloque, con descripción y precio. El
+                      regalo tampoco lo lleva: es una unidad y solo una, así que
+                      el único control que tiene sentido ahí es retirarlo. Una
+                      segunda tablet se añade desde el catálogo y se cobra. */}
+                  {d.product && !isFreePrice(d.product) && !d.isGift ? (
                     <div className="flex shrink-0 items-center rounded-lg ring-1 ring-gray-200">
                       <button
                         type="button"

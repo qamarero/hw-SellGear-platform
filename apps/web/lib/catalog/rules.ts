@@ -83,9 +83,31 @@ export function hasProduct(items: CartLineState[], productId: string): boolean {
 }
 
 /**
- * Índice de la línea de tablet regalo, o -1. Se identifica por SKU + descuento
- * 100 %: el servidor no distingue un regalo de un descuento manual del 100 %,
- * así que esta es la única marca que hay.
+ * Una línea es regalo si lleva el 100 % de descuento. Esa es la única marca
+ * que hay: el servidor no distingue un regalo de un descuento manual del
+ * 100 %, así que en la BD son la misma fila.
+ */
+export function isGiftLine(line: CartLineState): boolean {
+  return line.discount_pct === GIFT_DISCOUNT_PCT
+}
+
+/**
+ * Índice de la línea DE PAGO de un producto, o -1.
+ *
+ * Salta las líneas de regalo a propósito: el regalo es una unidad y solo una,
+ * la que justifica Implementación Pro. Las unidades que se añadan después van
+ * a su propia línea, a precio normal. Sin esto, añadir la misma tablet desde
+ * el catálogo sumaba unidades a la línea regalada y se regalaban todas.
+ */
+function payableIndex(items: CartLineState[], productId: string): number {
+  return items.findIndex(
+    (it) => it.product_id === productId && !isGiftLine(it),
+  )
+}
+
+/**
+ * Índice de la línea de tablet regalo, o -1. Se identifica por SKU +
+ * descuento 100 % (ver `isGiftLine`).
  */
 export function tabletGiftIndex(
   items: CartLineState[],
@@ -93,7 +115,7 @@ export function tabletGiftIndex(
 ): number {
   if (!tablet) return -1
   return items.findIndex(
-    (it) => it.product_id === tablet.id && it.discount_pct === GIFT_DISCOUNT_PCT,
+    (it) => it.product_id === tablet.id && isGiftLine(it),
   )
 }
 
@@ -109,13 +131,17 @@ export function tabletGiftIndex(
  * tocarlo, pero el AE puede ajustarlo o descontarlo desde la línea. Los que
  * no tienen tarifa entran a `null` y el paso 2 no deja continuar hasta que se
  * rellenen.
+ *
+ * Las unidades se suman a la línea de pago, nunca a una de regalo: si el
+ * pedido ya lleva la tablet regalada por Implementación Pro y se añade otra
+ * desde el catálogo, la segunda abre línea propia y se cobra.
  */
 export function applyAddProduct(
   items: CartLineState[],
   product: Product,
   qty = 1,
 ): CartLineState[] {
-  const idx = items.findIndex((it) => it.product_id === product.id)
+  const idx = payableIndex(items, product.id)
   if (idx >= 0) {
     const next = [...items]
     next[idx] = { ...next[idx], qty: next[idx].qty + qty }
@@ -136,6 +162,13 @@ export function applyAddProduct(
  * Suma `delta` a la cantidad. Si llega a 0 la línea se elimina, y si el
  * producto retirado era Implementación Pro se retira TAMBIÉN la tablet
  * regalo: quedaría una tablet gratis sin el servicio que la justifica.
+ *
+ * Trabaja sobre la línea de pago. Solo cae en la de regalo cuando no hay otra,
+ * para que restar desde el catálogo pueda retirar la tablet regalada.
+ *
+ * NO sube la cantidad de un regalo: la segunda unidad se cobra y va en línea
+ * aparte, y crearla necesita el `Product` (precio de referencia), que aquí no
+ * tenemos. Para sumar unidades usa siempre `applyAddProduct`, que sabe hacerlo.
  */
 export function applyAdjustQty(
   items: CartLineState[],
@@ -143,8 +176,11 @@ export function applyAdjustQty(
   delta: number,
   ctx: { implPro?: Product | null; tablet?: Product | null } = {},
 ): CartLineState[] {
-  const idx = items.findIndex((it) => it.product_id === productId)
+  const payable = payableIndex(items, productId)
+  const idx =
+    payable >= 0 ? payable : items.findIndex((it) => it.product_id === productId)
   if (idx < 0) return items
+  if (delta > 0 && isGiftLine(items[idx])) return items
 
   const newQty = items[idx].qty + delta
   if (newQty > 0) {
