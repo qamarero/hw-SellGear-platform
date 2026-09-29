@@ -50,7 +50,11 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1)
 
   if (q) {
-    // Busqueda simple multi-campo (shipment_id, sender_name, recipient_name).
+    // Busqueda simple multi-campo. `albaran` y `tracking_number` guardan los
+    // dos el numero de albaran de TIPSA (se escriben juntos al crear el envio,
+    // mas abajo en este mismo fichero), pero se buscan los dos: el refresco de
+    // TIPSA solo mantiene tracking_number, y un envio que llegue por otra via
+    // puede tener uno sin el otro.
     const safe = q.replace(/[,()"%]/g, ' ').trim()
     if (safe) {
       const fragment = `%${safe}%`
@@ -60,6 +64,7 @@ export async function GET(request: NextRequest) {
           `sender_name.ilike.${fragment}`,
           `recipient_name.ilike.${fragment}`,
           `albaran.ilike.${fragment}`,
+          `tracking_number.ilike.${fragment}`,
         ].join(','),
       )
     }

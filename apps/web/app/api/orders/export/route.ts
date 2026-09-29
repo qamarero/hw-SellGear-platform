@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { buildOrderSearchOr } from '@/lib/orders/search'
 import { generateCSV } from '@/lib/metrics'
 import type { UserRole, OrderStatus, PurchaseType } from '@/types/database'
 
@@ -44,10 +45,8 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    const term = `%${search}%`
-    query = query.or(
-      `customer_name.ilike.${term},operation_id.ilike.${term},venue_name.ilike.${term}`
-    )
+    const or = buildOrderSearchOr(search)
+    if (or) query = query.or(or)
   }
 
   const { data: orders, error } = await query

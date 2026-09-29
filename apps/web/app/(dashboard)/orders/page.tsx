@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildOrderSearchOr } from '@/lib/orders/search'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import type { Order, OrderStatus, PurchaseType, UserRole } from '@/types/database'
@@ -82,10 +83,8 @@ export default async function OrdersPage({
   }
 
   if (params.search) {
-    const term = `%${params.search}%`
-    query = query.or(
-      `customer_name.ilike.${term},operation_id.ilike.${term},venue_name.ilike.${term}`
-    )
+    const or = buildOrderSearchOr(params.search)
+    if (or) query = query.or(or)
   }
 
   // Truco N+1: pedimos PER_PAGE+1 filas. Si vuelven PER_PAGE+1, hay siguiente

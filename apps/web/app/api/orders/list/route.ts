@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { buildOrderSearchOr } from '@/lib/orders/search'
 import type { Order, OrderStatus, PurchaseType } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -66,10 +67,8 @@ export async function GET(request: NextRequest) {
 
   const search = sp.get('search')
   if (search) {
-    const term = `%${search}%`
-    q = q.or(
-      `customer_name.ilike.${term},operation_id.ilike.${term},venue_name.ilike.${term}`,
-    )
+    const or = buildOrderSearchOr(search)
+    if (or) q = q.or(or)
   }
 
   // Truco N+1: pedimos limit+1 filas para saber si hay siguiente pagina

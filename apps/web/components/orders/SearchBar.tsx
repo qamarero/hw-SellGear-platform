@@ -54,7 +54,7 @@ export default function SearchBar() {
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Buscar por cliente, ID, venue..."
+        placeholder="Buscar por cliente, ID, venue, albarán..."
         className="w-72 rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {value && (
