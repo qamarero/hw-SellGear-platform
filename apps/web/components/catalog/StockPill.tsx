@@ -1,5 +1,28 @@
 import { stockBadge, type ProductStockState } from '@/lib/stock/compute'
 
+/**
+ * Lo que sustituye al botón «Añadir» cuando el producto no se puede pedir.
+ * Una etiqueta y no un botón deshabilitado: un botón gris sigue pareciendo
+ * algo que se pulsa. Mismo alto (44 px) para que el pie no salte.
+ */
+export function StockBlockedChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex min-h-[44px] items-center rounded-lg bg-gray-100 px-3 text-[13px] font-bold text-gray-500 ring-1 ring-gray-200">
+      {label}
+    </span>
+  )
+}
+
+/**
+ * Marco ámbar de "quedan pocas". Va en línea y no como clase: las reglas de
+ * .product-card en catalog.css no tienen capa y ganan a cualquier utilidad
+ * de Tailwind (docs/DESIGN_SYSTEM.md), incluido su :hover.
+ */
+export const LOW_STOCK_FRAME: React.CSSProperties = {
+  borderColor: 'var(--amber-400)',
+  boxShadow: '0 0 0 1px var(--amber-300), 0 10px 26px rgba(255, 170, 0, 0.16)',
+}
+
 interface StockPillProps {
   stock: ProductStockState | undefined
   /** `overlay` va sobre la foto de la tarjeta; `inline`, junto al precio. */

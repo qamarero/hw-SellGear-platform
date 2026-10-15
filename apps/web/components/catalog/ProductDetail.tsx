@@ -15,8 +15,8 @@ import PackComparison from './PackComparison'
 import PriceTag from './PriceTag'
 import ProductBadge from './ProductBadge'
 import SpecTable from './SpecTable'
-import StockPill from './StockPill'
-import type { ProductStockState } from '@/lib/stock/compute'
+import StockPill, { StockBlockedChip } from './StockPill'
+import { stockLook, type ProductStockState } from '@/lib/stock/compute'
 
 interface ProductDetailProps {
   product: Product
@@ -47,6 +47,7 @@ export default function ProductDetail({
   const specs = product.specifications ?? []
   const highlights = product.highlights ?? []
   const isCanarias = product.region === 'canarias'
+  const look = stockLook(stock, qty)
 
   return (
     <>
@@ -63,6 +64,7 @@ export default function ProductDetail({
                 fill
                 sizes="(max-width: 900px) 100vw, 45vw"
                 priority
+                className={look.blocked ? 'opacity-50 grayscale' : undefined}
               />
             ) : (
               <span className="product-media-fallback">
@@ -112,15 +114,19 @@ export default function ProductDetail({
             )}
 
             <div className="detail-actions">
-              <AddToOrderButton
-                qty={qty}
-                productName={product.name}
-                onAdd={() => onAdd(product)}
-                onInc={() => onInc(product)}
-                onDec={() => onDec(product)}
-                lockQty={lockQty}
-                maxQty={stock?.maxQty}
-              />
+              {look.blocked && look.blockedLabel ? (
+                <StockBlockedChip label={look.blockedLabel} />
+              ) : (
+                <AddToOrderButton
+                  qty={qty}
+                  productName={product.name}
+                  onAdd={() => onAdd(product)}
+                  onInc={() => onInc(product)}
+                  onDec={() => onDec(product)}
+                  lockQty={lockQty}
+                  maxQty={stock?.maxQty}
+                />
+              )}
             </div>
 
             {product.availability_note && (

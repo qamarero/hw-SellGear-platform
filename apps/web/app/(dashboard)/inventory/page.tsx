@@ -6,6 +6,7 @@ import { getCatalog } from '@/lib/catalog/queries'
 import { getStockSnapshot, toStockView } from '@/lib/stock/server'
 import {
   ENVIADO_RESERVE_DAYS,
+  LOW_STOCK,
   isStockControlled,
   productAvailable,
 } from '@/lib/stock/compute'
@@ -183,7 +184,7 @@ export default async function InventoryPage() {
                         className={`px-4 py-2.5 text-right font-mono text-sm font-semibold ${
                           orderable <= 0
                             ? 'text-red-600'
-                            : orderable <= 5
+                            : orderable <= LOW_STOCK
                               ? 'text-amber-700'
                               : 'text-gray-900'
                         }`}

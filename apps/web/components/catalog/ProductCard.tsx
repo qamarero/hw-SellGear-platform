@@ -11,8 +11,8 @@ import ModelOptions from './ModelOptions'
 import PackComparison from './PackComparison'
 import PriceTag from './PriceTag'
 import ProductBadge from './ProductBadge'
-import StockPill from './StockPill'
-import type { ProductStockState } from '@/lib/stock/compute'
+import StockPill, { LOW_STOCK_FRAME, StockBlockedChip } from './StockPill'
+import { stockLook, type ProductStockState } from '@/lib/stock/compute'
 
 interface ProductCardProps {
   product: Product
@@ -55,6 +55,9 @@ export default function ProductCard({
   stock,
 }: ProductCardProps) {
   const inOrder = qty > 0
+  // Sin stock (y no admin): gris y sin botón. Quedan pocas: marco ámbar,
+  // salvo si ya está en el pedido, donde manda el marco de marca.
+  const look = stockLook(stock, qty)
   const href = `/catalogo/producto/${product.code}`
   const image = productImageUrl(product)
   const meta = categoryMeta(product.category)
@@ -80,7 +83,7 @@ export default function ProductCard({
           alt={product.name}
           fill
           sizes="(max-width: 700px) 100vw, (max-width: 1100px) 45vw, 30vw"
-          className="product-image"
+          className={look.blocked ? 'product-image opacity-50 grayscale' : 'product-image'}
         />
       ) : (
         <span className="product-media-fallback">
@@ -93,7 +96,18 @@ export default function ProductCard({
   const title = <h3>{product.name}</h3>
 
   return (
-    <article className={inOrder ? 'product-card in-cart' : 'product-card'}>
+    <article
+      className={[
+        'product-card',
+        inOrder ? 'in-cart' : '',
+        // `!`: el fondo y el hover de .product-card no tienen capa (ver
+        // LOW_STOCK_FRAME); sin él la tarjeta bloqueada seguiría blanca.
+        look.blocked ? 'bg-gray-50! hover:transform-none!' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={look.low && !inOrder ? LOW_STOCK_FRAME : undefined}
+    >
       {mode === 'link' ? (
         <Link href={href} className="product-media" aria-label={`Ver ${product.name}`}>
           {media}
@@ -111,7 +125,7 @@ export default function ProductCard({
         <div className="product-media">{media}</div>
       )}
 
-      <div className="product-content">
+      <div className={look.blocked ? 'product-content opacity-70' : 'product-content'}>
         <div className="product-meta">
           {product.brand && <span>{product.brand}</span>}
           {product.model && <span>{product.model}</span>}
@@ -155,16 +169,20 @@ export default function ProductCard({
 
         <div className="product-card-footer">
           <PriceTag product={product} />
-          <AddToOrderButton
-            qty={qty}
-            productName={product.name}
-            onAdd={() => onAdd(product)}
-            onInc={() => onInc(product)}
-            onDec={() => onDec(product)}
-            single={single}
-            lockQty={lockQty}
-            maxQty={stock?.maxQty}
-          />
+          {look.blocked && look.blockedLabel ? (
+            <StockBlockedChip label={look.blockedLabel} />
+          ) : (
+            <AddToOrderButton
+              qty={qty}
+              productName={product.name}
+              onAdd={() => onAdd(product)}
+              onInc={() => onInc(product)}
+              onDec={() => onDec(product)}
+              single={single}
+              lockQty={lockQty}
+              maxQty={stock?.maxQty}
+            />
+          )}
         </div>
 
         {footerExtra}

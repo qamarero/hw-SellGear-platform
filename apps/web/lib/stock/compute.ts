@@ -30,7 +30,7 @@ import type { Product, ProductCategory } from '@/types/database'
 const UNCONTROLLED: readonly ProductCategory[] = ['service', 'custom', 'saas_hardware']
 
 /** Umbral a partir del cual la tarjeta avisa de que quedan pocas. */
-export const LOW_STOCK = 5
+export const LOW_STOCK = 3
 
 /** Reserva de un pedido enviado mientras HWToolbox no registra la salida. */
 export const ENVIADO_RESERVE_DAYS = 15
@@ -171,6 +171,38 @@ export function stockBadge(s: ProductStockState): string | null {
   if (s.available <= 0) return 'Sin stock'
   if (s.available <= LOW_STOCK) return `Quedan ${s.available}`
   return null
+}
+
+/** Cómo se pinta la tarjeta según su stock. */
+export interface StockLook {
+  /**
+   * No se puede añadir: tarjeta en gris y etiqueta fija en lugar del botón.
+   * Nunca para un admin, ni si ya hay unidades en el carrito (tienen que
+   * poder quitarse).
+   */
+  blocked: boolean
+  /** Texto de esa etiqueta. */
+  blockedLabel: string | null
+  /** Quedan pocas (≤ LOW_STOCK): marco ámbar. */
+  low: boolean
+}
+
+export function stockLook(
+  s: ProductStockState | undefined,
+  inCart: number,
+): StockLook {
+  if (!s || !s.controlled) return { blocked: false, blockedLabel: null, low: false }
+  const blocked = !s.bypass && inCart === 0 && s.maxQty <= 0
+  return {
+    blocked,
+    blockedLabel: !blocked
+      ? null
+      : s.unknown || s.available <= 0
+        ? 'No disponible'
+        : // Hay stock, pero el resto del pedido ya se lo lleva (pool compartido).
+          'Agotado en este pedido',
+    low: !s.unknown && s.available > 0 && s.available <= LOW_STOCK,
+  }
 }
 
 export type StockCheck = { ok: true } | { ok: false; error: string }

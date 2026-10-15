@@ -19,6 +19,7 @@ import {
   productHeadroom,
   productStockState,
   stockBadge,
+  stockLook,
   validateStock,
   type StockLine,
   type StockView,
@@ -184,6 +185,50 @@ describe('productStockState / stockBadge', () => {
     const s = productStockState(tpvPro, [], view({ status: 'unavailable' }))
     expect(stockBadge(s)).toBe('Stock sin comprobar')
     expect(s.maxQty).toBe(0)
+  })
+})
+
+describe('stockLook', () => {
+  it('sin stock y fuera del carrito: bloqueada, "No disponible"', () => {
+    const s = productStockState(tpvPro, [], view({ pools: { 'tpv-pro': 0 } }))
+    expect(stockLook(s, 0)).toEqual({ blocked: true, blockedLabel: 'No disponible', low: false })
+  })
+
+  it('si ya está en el carrito no se bloquea: tiene que poder quitarse', () => {
+    const s = productStockState(tpvPro, [L(tpvPro, 3)], view())
+    expect(stockLook(s, 3).blocked).toBe(false)
+  })
+
+  it('hay stock pero el resto del pedido se lo lleva', () => {
+    // 3 TPV Pro pedibles y el carrito ya tiene 3 TPV sueltos: el Pack Pro
+    // (que también lleva TPV Pro) se queda sin hueco, aunque por sí solo
+    // tendría 2 (lo limita la impresora WiFi).
+    const s = productStockState(packPro, [L(tpvPro, 3)], view())
+    expect(stockLook(s, 0)).toEqual({
+      blocked: true,
+      blockedLabel: 'Agotado en este pedido',
+      low: true,
+    })
+  })
+
+  it('admin: nunca bloqueada', () => {
+    const s = productStockState(tpvPro, [], view({ bypass: true, pools: { 'tpv-pro': 0 } }))
+    expect(stockLook(s, 0).blocked).toBe(false)
+  })
+
+  it('marca "quedan pocas" con 3 o menos', () => {
+    expect(stockLook(productStockState(tpvPro, [], view()), 0).low).toBe(true)
+    expect(
+      stockLook(productStockState(tpvPro, [], view({ pools: { 'tpv-pro': 4 } })), 0).low,
+    ).toBe(false)
+  })
+
+  it('servicios: ni bloqueo ni aviso', () => {
+    expect(stockLook(productStockState(implPro, [], view()), 0)).toEqual({
+      blocked: false,
+      blockedLabel: null,
+      low: false,
+    })
   })
 })
 
