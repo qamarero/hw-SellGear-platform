@@ -11,6 +11,8 @@ import ModelOptions from './ModelOptions'
 import PackComparison from './PackComparison'
 import PriceTag from './PriceTag'
 import ProductBadge from './ProductBadge'
+import StockPill from './StockPill'
+import type { ProductStockState } from '@/lib/stock/compute'
 
 interface ProductCardProps {
   product: Product
@@ -35,6 +37,8 @@ interface ProductCardProps {
   lockQty?: boolean
   /** Slot para contenido extra en el pie (plan de plazos de financiación). */
   footerExtra?: React.ReactNode
+  /** Stock del producto (lib/stock). Sin él, la tarjeta no limita nada. */
+  stock?: ProductStockState
 }
 
 export default function ProductCard({
@@ -48,6 +52,7 @@ export default function ProductCard({
   single = false,
   lockQty = false,
   footerExtra,
+  stock,
 }: ProductCardProps) {
   const inOrder = qty > 0
   const href = `/catalogo/producto/${product.code}`
@@ -68,6 +73,7 @@ export default function ProductCard({
           {single ? 'Seleccionado' : `× ${qty}`}
         </span>
       )}
+      <StockPill stock={stock} />
       {image ? (
         <Image
           src={image}
@@ -157,6 +163,7 @@ export default function ProductCard({
             onDec={() => onDec(product)}
             single={single}
             lockQty={lockQty}
+            maxQty={stock?.maxQty}
           />
         </div>
 

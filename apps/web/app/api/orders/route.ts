@@ -28,6 +28,8 @@ import {
   financingInstallments,
 } from '@/lib/financing'
 import { notifyOrderEvent, formatItemsSummary } from '@/lib/slack'
+import { demandByPool, validateStock, type StockLine } from '@/lib/stock/compute'
+import { canBypassStock, loadStockSnapshot, toStockView } from '@/lib/stock/server'
 
 /**
  * Tope de `order_items.notes` que acepta este endpoint.
@@ -439,6 +441,24 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  // 5.c Stock. Un no-admin solo pide lo que hay; un admin pide sin tope
+  // (reacondicionados, sustituciones, urgencias) pero su pedido reserva igual.
+  // Se comprueba ANTES de crear nada. Ver lib/stock/compute.ts.
+  const stockBypass = canBypassStock(user.email, role)
+  const stockLines: StockLine[] = resolved.map((l) => ({
+    product: productMap.get(l.product_id)!,
+    qty: l.qty,
+  }))
+  if (!stockBypass) {
+    const stockCheck = validateStock(
+      stockLines,
+      toStockView(await loadStockSnapshot(), false),
+    )
+    if (!stockCheck.ok) {
+      return NextResponse.json({ error: stockCheck.error }, { status: 409 })
+    }
+  }
+
   // Total con IVA en céntimos → euros (compat orders.amount).
   // Aplicamos también el descuento global (%) sobre la base agregada.
   const totals = cartTotals(
@@ -505,6 +525,36 @@ export async function POST(request: NextRequest) {
 
   if (itemsError) {
     console.error('Error inserting order items:', itemsError.message)
+  }
+
+  // 6.2 Carrera por la última unidad: si otro pedido entró entre la
+  // comprobación de arriba y este insert, ahora algún pool de los que pide
+  // este pedido queda en negativo. Se deshace el pedido (las líneas caen en
+  // cascada) ANTES de pagos, historial y Slack, y se avisa al comercial.
+  if (!stockBypass && !itemsError) {
+    const after = toStockView(await loadStockSnapshot(), false)
+    const oversold =
+      after.status === 'ok' &&
+      [...demandByPool(stockLines, after).keys()].some(
+        (pool) => (after.pools[pool] ?? 0) < 0,
+      )
+    if (oversold) {
+      const { error: rollbackError } = await admin
+        .from('orders')
+        .delete()
+        .eq('id', newOrder.id)
+      if (rollbackError) {
+        console.error('Error deshaciendo pedido sin stock:', rollbackError.message)
+      } else {
+        return NextResponse.json(
+          {
+            error:
+              'Otro pedido se ha llevado las últimas unidades mientras confirmabas. No se ha creado el pedido: revisa las cantidades.',
+          },
+          { status: 409 },
+        )
+      }
+    }
   }
 
   // 6.5 Financiación: generar los 3 plazos de pago (entrada + 2 plazos).

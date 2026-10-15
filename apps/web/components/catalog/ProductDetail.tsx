@@ -15,6 +15,8 @@ import PackComparison from './PackComparison'
 import PriceTag from './PriceTag'
 import ProductBadge from './ProductBadge'
 import SpecTable from './SpecTable'
+import StockPill from './StockPill'
+import type { ProductStockState } from '@/lib/stock/compute'
 
 interface ProductDetailProps {
   product: Product
@@ -25,6 +27,8 @@ interface ProductDetailProps {
   lockQty?: boolean
   /** Contenido del bloque inferior (productos relacionados). */
   related?: React.ReactNode
+  /** Stock del producto (lib/stock). Sin él, la ficha no limita nada. */
+  stock?: ProductStockState
 }
 
 export default function ProductDetail({
@@ -35,6 +39,7 @@ export default function ProductDetail({
   onDec,
   lockQty = false,
   related,
+  stock,
 }: ProductDetailProps) {
   const image = productImageUrl(product)
   const meta = categoryMeta(product.category)
@@ -78,6 +83,8 @@ export default function ProductDetail({
 
             <PriceTag product={product} variant="detail" />
 
+            <StockPill stock={stock} variant="inline" />
+
             {isCanarias && (
               <p className="canarias-tax-note">
                 Precio final para Canarias, sin IVA
@@ -112,6 +119,7 @@ export default function ProductDetail({
                 onInc={() => onInc(product)}
                 onDec={() => onDec(product)}
                 lockQty={lockQty}
+                maxQty={stock?.maxQty}
               />
             </div>
 

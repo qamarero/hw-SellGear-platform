@@ -28,7 +28,7 @@ export default function CatalogBrowser({
   lockedTab,
   showHeading = true,
 }: CatalogBrowserProps) {
-  const { picks, add, inc, dec } = useCatalogSelection()
+  const { picks, add, inc, dec, stockOf } = useCatalogSelection()
 
   const qtyByProductId = new Map<string, number>()
   for (const p of products) {
@@ -47,6 +47,7 @@ export default function CatalogBrowser({
         mode="link"
         lockedTab={lockedTab}
         showHeading={showHeading}
+        stockFor={stockOf}
       />
       <div className="section-shell">
         <CatalogSelectionBar products={products} canCreateOrder={canCreateOrder} />

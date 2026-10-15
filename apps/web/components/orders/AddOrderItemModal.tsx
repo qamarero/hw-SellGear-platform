@@ -24,6 +24,12 @@ import {
   GIFT_DISCOUNT_PCT,
   findByCode,
 } from '@/lib/catalog/rules'
+import {
+  productStockState,
+  stockBadge,
+  type ProductStockState,
+  type StockView,
+} from '@/lib/stock/compute'
 
 interface AddOrderItemModalProps {
   orderId: string
@@ -50,6 +56,9 @@ export default function AddOrderItemModal({
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('catalog')
   const [products, setProducts] = useState<Product[]>([])
+  // Stock del usuario (lib/stock): pinta y limita la lista. El servidor
+  // vuelve a comprobarlo al añadir la línea.
+  const [stock, setStock] = useState<StockView | null>(null)
   const [productsLoading, setProductsLoading] = useState(true)
   const [productsError, setProductsError] = useState<string | null>(null)
 
@@ -86,9 +95,13 @@ export default function AddOrderItemModal({
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`)
         }
-        const data = (await res.json()) as { products?: Product[] }
+        const data = (await res.json()) as {
+          products?: Product[]
+          stock?: StockView
+        }
         if (!cancelled) {
           setProducts(data.products ?? [])
+          setStock(data.stock ?? null)
         }
       } catch (err) {
         if (!cancelled) {
@@ -131,6 +144,17 @@ export default function AddOrderItemModal({
     () => findByCode(products, TABLET_GIFT_CODE),
     [products],
   )
+
+  // Una línea nueva por vez: el stock de cada producto se mide sin carrito.
+  // Las líneas que el pedido ya tiene cuentan como comprometidas si está
+  // abierto, así que ya están descontadas.
+  const stockOf = useCallback(
+    (p: Product): ProductStockState | undefined =>
+      stock ? productStockState(p, [], stock) : undefined,
+    [stock],
+  )
+  const tabletOutOfStock =
+    tabletProduct !== null && (stockOf(tabletProduct)?.maxQty ?? Infinity) <= 0
 
   // Productos filtrados por la búsqueda (case insensitive sobre name).
   // Excluimos los SKU ocultos del catálogo ('otro'): para línea libre se usa
@@ -233,6 +257,7 @@ export default function AddOrderItemModal({
           tab === 'catalog' &&
           isImplPro &&
           addTabletGift &&
+          !tabletOutOfStock &&
           tabletProduct
         ) {
           const giftRes = await fetch(`/api/orders/${orderId}/items`, {
@@ -281,6 +306,7 @@ export default function AddOrderItemModal({
       router,
       isImplPro,
       addTabletGift,
+      tabletOutOfStock,
       tabletProduct,
     ],
   )
@@ -377,6 +403,7 @@ export default function AddOrderItemModal({
               onNameOverrideChange={setCatalogNameOverride}
               priceOverride={catalogPriceOverride}
               onPriceOverrideChange={setCatalogPriceOverride}
+              stockOf={stockOf}
             />
           ) : (
             <FreeTab
@@ -401,7 +428,8 @@ export default function AddOrderItemModal({
             >
               <input
                 type="checkbox"
-                checked={addTabletGift}
+                checked={addTabletGift && !tabletOutOfStock}
+                disabled={tabletOutOfStock}
                 onChange={(e) => setAddTabletGift(e.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-brand"
               />
@@ -416,6 +444,11 @@ export default function AddOrderItemModal({
                     {formatEurosCents(tabletProduct.price_cents)}
                   </span>
                   ). Solo si el paquete acordado la incluye.
+                  {tabletOutOfStock && (
+                    <strong className="ml-1 font-semibold text-red-700">
+                      Ahora mismo no queda stock de tablets.
+                    </strong>
+                  )}
                 </p>
               </div>
             </label>
@@ -490,6 +523,8 @@ interface CatalogTabProps {
   onNameOverrideChange: (s: string) => void
   priceOverride: string
   onPriceOverrideChange: (s: string) => void
+  /** Stock de cada producto (lib/stock); undefined = sin datos, sin tope. */
+  stockOf: (p: Product) => ProductStockState | undefined
 }
 
 function CatalogTab({
@@ -510,10 +545,16 @@ function CatalogTab({
   onNameOverrideChange,
   priceOverride,
   onPriceOverrideChange,
+  stockOf,
 }: CatalogTabProps) {
   // Las ofertas de precio cerrado fuerzan descuento 0 (el precio negociado ES
   // el final). Lo dice products.allows_discount, no una lista de `code`.
   const isSaasHw = !allowsLineDiscount(selectedProduct)
+  const selectedStock = selectedProduct ? stockOf(selectedProduct) : undefined
+  const maxQty =
+    selectedStock && Number.isFinite(selectedStock.maxQty)
+      ? selectedStock.maxQty
+      : undefined
 
   return (
     <>
@@ -552,12 +593,17 @@ function CatalogTab({
                 <ul className="divide-y divide-gray-100">
                   {filteredProducts.map((p) => {
                     const active = selectedProduct?.id === p.id
+                    const s = stockOf(p)
+                    const badge = s ? stockBadge(s) : null
+                    // Sin stock: se ve (para saber que existe) pero no se elige.
+                    const blocked = s !== undefined && s.maxQty <= 0
                     return (
                       <li key={p.id}>
                         <button
                           type="button"
                           onClick={() => onSelect(p.id)}
-                          className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                          disabled={blocked}
+                          className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                             active
                               ? 'bg-brand/5 text-gray-900'
                               : 'text-gray-700 hover:bg-gray-50'
@@ -571,6 +617,20 @@ function CatalogTab({
                             {p.brand && (
                               <span className="block truncate text-[11px] text-gray-500">
                                 {[p.brand, p.model].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                            {badge && (
+                              <span
+                                className={`block text-[11px] font-semibold ${
+                                  s && (s.unknown || s.available <= 0)
+                                    ? 'text-red-600'
+                                    : 'text-amber-700'
+                                }`}
+                              >
+                                {badge}
+                                {s?.bypass && (s.unknown || s.available <= 0)
+                                  ? ' · puedes pedirlo como admin'
+                                  : ''}
                               </span>
                             )}
                           </span>
@@ -643,14 +703,23 @@ function CatalogTab({
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-700">
             Cantidad
+            {maxQty !== undefined && (
+              <span className="ml-1 font-normal text-gray-500">
+                (máx. {maxQty})
+              </span>
+            )}
           </label>
           <input
             type="number"
             min={1}
+            max={maxQty}
             value={qty}
-            onChange={(e) =>
-              onQtyChange(Math.max(1, parseInt(e.target.value) || 1))
-            }
+            onChange={(e) => {
+              const n = Math.max(1, parseInt(e.target.value) || 1)
+              onQtyChange(
+                maxQty !== undefined ? Math.min(n, Math.max(1, maxQty)) : n,
+              )
+            }}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-right font-mono text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
         </div>

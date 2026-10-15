@@ -42,6 +42,8 @@ import {
   missingPriceError,
   canaryShippingError,
 } from '@/lib/product-rules'
+import { validateStock } from '@/lib/stock/compute'
+import { canBypassStock, loadStockSnapshot, toStockView } from '@/lib/stock/server'
 
 export const runtime = 'nodejs'
 
@@ -164,6 +166,19 @@ export async function POST(
         { error: canaryShippingError(product as Product) },
         { status: 400 },
       )
+    }
+
+    // Stock: la línea nueva tiene que caber en lo pedible. Las líneas que el
+    // pedido ya tiene no se vuelven a sumar: si está abierto, ya cuentan
+    // como comprometidas. La tablet regalo del modal entra por aquí también.
+    if (!canBypassStock(user.email, role)) {
+      const stockCheck = validateStock(
+        [{ product: product as Product, qty }],
+        toStockView(await loadStockSnapshot(), false),
+      )
+      if (!stockCheck.ok) {
+        return NextResponse.json({ error: stockCheck.error }, { status: 409 })
+      }
     }
 
     // Rango libre 0-100 entero; allows_discount = false fuerza 0.

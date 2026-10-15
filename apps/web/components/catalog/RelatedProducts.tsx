@@ -10,7 +10,7 @@ import { useCatalogSelection } from './CatalogSelectionProvider'
  * selección para pintar el badge de cantidad y los botones.
  */
 export default function RelatedProducts({ products }: { products: Product[] }) {
-  const { qtyOf, add, inc, dec } = useCatalogSelection()
+  const { qtyOf, add, inc, dec, stockOf } = useCatalogSelection()
   return (
     <>
       {products.map((p) => (
@@ -23,6 +23,7 @@ export default function RelatedProducts({ products }: { products: Product[] }) {
           onInc={inc}
           onDec={dec}
           lockQty={isFreePrice(p)}
+          stock={stockOf(p)}
         />
       ))}
     </>

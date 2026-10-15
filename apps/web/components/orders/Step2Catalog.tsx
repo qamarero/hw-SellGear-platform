@@ -27,6 +27,7 @@ import CatalogExplorer from '@/components/catalog/CatalogExplorer'
 import ProductDetailModal from '@/components/catalog/ProductDetailModal'
 import CartLine from './CartLine'
 import CartFab from './CartFab'
+import type { ProductStockState } from '@/lib/stock/compute'
 
 /**
  * Pestañas que se ofrecen en el wizard: las 7 familias peninsulares. La de
@@ -48,6 +49,11 @@ interface Step2CatalogProps {
   onRegionChange: (region: ProductRegion) => void
   /** Solo para que el total del botón flotante cuadre con CartSummary. */
   discountGlobalPct?: number
+  /**
+   * Stock de cada producto contando el carrito (lib/stock). Solo pinta y
+   * desactiva botones: el tope de verdad lo pone onItemsChange del wizard.
+   */
+  stockFor?: (product: Product) => ProductStockState | undefined
 }
 
 /**
@@ -73,6 +79,7 @@ export default function Step2Catalog({
   region,
   onRegionChange,
   discountGlobalPct = 0,
+  stockFor,
 }: Step2CatalogProps) {
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   // Marca local para no volver a preguntar por el regalo si ya dijo que no.
@@ -94,6 +101,13 @@ export default function Step2Catalog({
    */
   const giftIdx = hasImplPro ? tabletGiftIndex(items, tablet) : -1
   const hasGift = giftIdx >= 0
+  // La tablet regalo es una unidad física: si no queda, no se puede regalar.
+  const tabletStock = tablet ? stockFor?.(tablet) : undefined
+  const giftBlocked =
+    !hasGift &&
+    tablet !== null &&
+    tabletStock !== undefined &&
+    tabletStock.maxQty <= (qtyMap.get(tablet.id) ?? 0)
   const productById = useMemo(
     () => new Map(products.map((p) => [p.id, p])),
     [products],
@@ -172,6 +186,7 @@ export default function Step2Catalog({
           isSaasOnly ? 'service' : region === 'canarias' ? 'canarias' : undefined
         }
         visibleTabs={PENINSULA_TABS}
+        stockFor={stockFor}
         onAdd={(p) => onItemsChange(applyAddProduct(items, p))}
         onInc={(p) => onItemsChange(applyAddProduct(items, p))}
         onDec={(p) => {
@@ -203,6 +218,11 @@ export default function Step2Catalog({
                   {formatEurosCents(tablet.price_cents)}
                 </span>
                 ). Marca «Sí» solo si el paquete acordado la incluye.
+                {giftBlocked && (
+                  <strong className="ml-1 font-semibold text-red-700">
+                    Ahora mismo no queda stock de tablets.
+                  </strong>
+                )}
               </p>
             </div>
             <div className="flex gap-2">
@@ -212,11 +232,13 @@ export default function Step2Catalog({
                   onItemsChange(applyAddTabletGift(items, tablet))
                   setGiftDeclined(false)
                 }}
-                disabled={hasGift}
+                disabled={hasGift || giftBlocked}
                 className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                   hasGift
                     ? 'cursor-default bg-brand text-white'
-                    : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-brand hover:text-white'
+                    : giftBlocked
+                      ? 'cursor-not-allowed bg-gray-100 text-gray-400 ring-1 ring-gray-200'
+                      : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-brand hover:text-white'
                 }`}
               >
                 Sí, añadir
@@ -373,6 +395,7 @@ export default function Step2Catalog({
           onDec={(p) =>
             onItemsChange(applyAdjustQty(items, p.id, -1, { implPro, tablet }))
           }
+          stock={stockFor?.(detailProduct)}
         />
       )}
     </CatalogRoot>

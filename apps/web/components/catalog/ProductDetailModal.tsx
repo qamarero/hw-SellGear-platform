@@ -7,6 +7,7 @@ import type { Product } from '@/types/database'
 import { isFreePrice } from '@/lib/product-rules'
 import CatalogRoot from './CatalogRoot'
 import ProductDetail from './ProductDetail'
+import type { ProductStockState } from '@/lib/stock/compute'
 
 interface ProductDetailModalProps {
   product: Product
@@ -15,6 +16,7 @@ interface ProductDetailModalProps {
   onAdd: (product: Product) => void
   onInc: (product: Product) => void
   onDec: (product: Product) => void
+  stock?: ProductStockState
 }
 
 /**
@@ -34,6 +36,7 @@ export default function ProductDetailModal({
   onAdd,
   onInc,
   onDec,
+  stock,
 }: ProductDetailModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -112,6 +115,7 @@ export default function ProductDetailModal({
               onInc={onInc}
               onDec={onDec}
               lockQty={isFreePrice(product)}
+              stock={stock}
             />
           </div>
         </div>

@@ -14,6 +14,8 @@ interface AddToOrderButtonProps {
   /** Cantidad fija a 1 (productos de precio libre). */
   lockQty?: boolean
   disabled?: boolean
+  /** Tope de unidades por stock (lib/stock). Sin tope por defecto. */
+  maxQty?: number
 }
 
 /**
@@ -32,6 +34,7 @@ export default function AddToOrderButton({
   single = false,
   lockQty = false,
   disabled = false,
+  maxQty = Number.POSITIVE_INFINITY,
 }: AddToOrderButtonProps) {
   const inOrder = qty > 0
 
@@ -40,7 +43,7 @@ export default function AddToOrderButton({
       <button
         type="button"
         onClick={onAdd}
-        disabled={disabled}
+        disabled={disabled || maxQty <= 0}
         className="select-button"
         aria-pressed={false}
         aria-label={`Añadir ${productName} al pedido`}
@@ -82,7 +85,7 @@ export default function AddToOrderButton({
       <button
         type="button"
         onClick={onInc}
-        disabled={qty >= MAX_QTY}
+        disabled={qty >= Math.min(MAX_QTY, maxQty)}
         aria-label={`Añadir una unidad de ${productName}`}
       >
         <Plus size={16} aria-hidden="true" />

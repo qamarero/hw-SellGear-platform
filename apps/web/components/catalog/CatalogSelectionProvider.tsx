@@ -12,6 +12,15 @@ import {
 import type { Product } from '@/types/database'
 import { MAX_PICKS, MAX_QTY, type CatalogPick } from '@/lib/catalog/order-link'
 import { isFreePrice } from '@/lib/product-rules'
+import {
+  guardStockChange,
+  productStockState,
+  type ProductRef,
+  type ProductStockState,
+  type StockLine,
+  type StockView,
+} from '@/lib/stock/compute'
+import StockNotice from '@/components/orders/StockNotice'
 
 /**
  * Selección dentro de /catalogo, antes de saltar al wizard.
@@ -35,6 +44,8 @@ interface SelectionContextValue {
   clear: () => void
   qtyOf: (code: string) => number
   asPicks: () => CatalogPick[]
+  /** Stock de un producto contando la selección (undefined sin datos). */
+  stockOf: (product: Product) => ProductStockState | undefined
 }
 
 const SelectionContext = createContext<SelectionContextValue | null>(null)
@@ -66,9 +77,35 @@ function readStored(): Map<string, number> {
   }
 }
 
-export function CatalogSelectionProvider({ children }: { children: ReactNode }) {
+interface CatalogSelectionProviderProps {
+  children: ReactNode
+  /** Stock del usuario, calculado en el layout (lib/stock). */
+  stock?: StockView | null
+  /** code → categoría y nombre: la selección guarda solo `code`. */
+  catalog?: ProductRef[]
+}
+
+export function CatalogSelectionProvider({
+  children,
+  stock = null,
+  catalog = [],
+}: CatalogSelectionProviderProps) {
   // Primer render siempre vacío, para no provocar mismatch de hidratación.
   const [picks, setPicks] = useState<Map<string, number>>(new Map())
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const refByCode = useMemo(
+    () => new Map(catalog.map((r) => [r.code, r])),
+    [catalog],
+  )
+  const toLines = useCallback(
+    (map: Map<string, number>): StockLine[] =>
+      [...map].flatMap(([code, qty]) => {
+        const product = refByCode.get(code)
+        return product ? [{ product, qty }] : []
+      }),
+    [refByCode],
+  )
 
   useEffect(() => {
     const stored = readStored()
@@ -84,6 +121,25 @@ export function CatalogSelectionProvider({ children }: { children: ReactNode }) 
     }
   }, [])
 
+  /**
+   * Como commit, pero no deja sumar unidades por encima de lo pedible (salvo
+   * admins). Quitar va siempre por commit: se puede aunque no cuadre.
+   */
+  const commitWithinStock = useCallback(
+    (next: Map<string, number>) => {
+      if (stock) {
+        const check = guardStockChange(toLines(picks), toLines(next), stock)
+        if (!check.ok) {
+          setNotice(check.error)
+          return
+        }
+      }
+      setNotice(null)
+      commit(next)
+    },
+    [stock, picks, toLines, commit],
+  )
+
   const add = useCallback(
     (product: Product) => {
       const next = new Map(picks)
@@ -93,9 +149,9 @@ export function CatalogSelectionProvider({ children }: { children: ReactNode }) 
       const step = isFreePrice(product) ? 0 : 1
       const current = next.get(product.code) ?? 0
       next.set(product.code, Math.min(MAX_QTY, current + (current ? step : 1)))
-      commit(next)
+      commitWithinStock(next)
     },
-    [picks, commit],
+    [picks, commitWithinStock],
   )
 
   const inc = useCallback(
@@ -104,9 +160,9 @@ export function CatalogSelectionProvider({ children }: { children: ReactNode }) 
       const next = new Map(picks)
       const current = next.get(product.code) ?? 0
       next.set(product.code, Math.min(MAX_QTY, current + 1))
-      commit(next)
+      commitWithinStock(next)
     },
-    [picks, commit],
+    [picks, commitWithinStock],
   )
 
   const dec = useCallback(
@@ -132,13 +188,16 @@ export function CatalogSelectionProvider({ children }: { children: ReactNode }) 
       clear,
       qtyOf: (code: string) => picks.get(code) ?? 0,
       asPicks: () => [...picks].map(([code, qty]) => ({ code, qty })),
+      stockOf: (product: Product) =>
+        stock ? productStockState(product, toLines(picks), stock) : undefined,
     }),
-    [picks, add, inc, dec, clear],
+    [picks, add, inc, dec, clear, stock, toLines],
   )
 
   return (
     <SelectionContext.Provider value={value}>
       {children}
+      <StockNotice message={notice} onClose={() => setNotice(null)} />
     </SelectionContext.Provider>
   )
 }

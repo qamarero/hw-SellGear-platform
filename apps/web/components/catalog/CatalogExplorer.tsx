@@ -20,6 +20,7 @@ import CatalogToolbar, { type CatalogSort } from './CatalogToolbar'
 import EmptyResults from './EmptyResults'
 import ProductCard from './ProductCard'
 import ProductGrid from './ProductGrid'
+import type { ProductStockState } from '@/lib/stock/compute'
 
 interface CatalogExplorerProps {
   products: Product[]
@@ -39,6 +40,8 @@ interface CatalogExplorerProps {
   lockedTab?: CatalogTabKey
   /** El wizard ya tiene su propio <h2>; evita duplicar el nivel. */
   showHeading?: boolean
+  /** Stock de cada tarjeta, contando el carrito actual (lib/stock). */
+  stockFor?: (product: Product) => ProductStockState | undefined
 }
 
 export default function CatalogExplorer({
@@ -53,6 +56,7 @@ export default function CatalogExplorer({
   visibleTabs,
   lockedTab,
   showHeading = true,
+  stockFor,
 }: CatalogExplorerProps) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<CatalogSort>('recommended')
@@ -207,6 +211,7 @@ export default function CatalogExplorer({
               // El precio de estos productos se acuerda en la línea del
               // pedido, así que en el catálogo la cantidad se fija a 1.
               lockQty={isFreePrice(p)}
+              stock={stockFor?.(p)}
             />
           ))}
         </ProductGrid>

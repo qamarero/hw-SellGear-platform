@@ -21,7 +21,7 @@ export default function ProductDetailBrowser({
   canCreateOrder,
   related,
 }: ProductDetailBrowserProps) {
-  const { qtyOf, add, inc, dec } = useCatalogSelection()
+  const { qtyOf, add, inc, dec, stockOf } = useCatalogSelection()
 
   return (
     <>
@@ -33,6 +33,7 @@ export default function ProductDetailBrowser({
         onDec={dec}
         lockQty={isFreePrice(product)}
         related={related}
+        stock={stockOf(product)}
       />
       <div className="section-shell">
         <CatalogSelectionBar products={products} canCreateOrder={canCreateOrder} />

@@ -20,6 +20,16 @@ import FinancingSummary from '@/components/orders/FinancingSummary'
 import { isFinanceableCode } from '@/lib/financing'
 import { SELECTION_PARAM, parseCatalogPicks } from '@/lib/catalog/order-link'
 import { applyAddProduct } from '@/lib/catalog/rules'
+import {
+  demandByPool,
+  guardStockChange,
+  productHeadroom,
+  productStockState,
+  toStockLines,
+  validateStock,
+  type StockView,
+} from '@/lib/stock/compute'
+import StockNotice from '@/components/orders/StockNotice'
 import BankReceiptInput from '@/components/orders/BankReceiptInput'
 import WizardSteps from '@/components/orders/WizardSteps'
 import PurchaseTypeTile, {
@@ -103,6 +113,13 @@ export default function NewOrderPage() {
    * descubrirlo al confirmar sería el peor momento).
    */
   const [region, setRegion] = useState<ProductRegion>('peninsula')
+  /**
+   * Stock de este usuario (lib/stock). Un no-admin no puede subir unidades
+   * por encima de lo pedible; un admin lo ve pero no tiene tope. El servidor
+   * vuelve a comprobarlo al crear el pedido.
+   */
+  const [stock, setStock] = useState<StockView | null>(null)
+  const [stockNotice, setStockNotice] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadCatalog() {
@@ -114,6 +131,7 @@ export default function NewOrderPage() {
           return
         }
         setProducts(data.products ?? [])
+        setStock(data.stock ?? null)
       } catch {
         setCatalogError('Error de conexión al cargar el catálogo.')
       } finally {
@@ -150,13 +168,30 @@ export default function NewOrderPage() {
     const byCode = new Map(products.map((p) => [p.code, p]))
     let next: CartLineState[] = []
     let applied = 0
+    const trimmed: string[] = []
     for (const pick of picks) {
       const product = byCode.get(pick.code)
       // Los codes desconocidos o inactivos se descartan en silencio: la URL
       // es entrada del usuario y el catalogo puede haber cambiado.
       if (!product) continue
-      next = applyAddProduct(next, product, pick.qty)
+      // El stock puede haber cambiado desde que se eligió en /catalogo: se
+      // recorta a lo pedible y se avisa, en vez de traer un carrito que el
+      // servidor va a rechazar.
+      let qty = pick.qty
+      if (stock && !stock.bypass) {
+        const lines = toStockLines(next, products)
+        const room = productHeadroom(product, demandByPool(lines, stock), stock)
+        qty = Math.min(qty, Math.max(0, room))
+        if (qty < pick.qty) trimmed.push(product.name)
+      }
+      if (qty <= 0) continue
+      next = applyAddProduct(next, product, qty)
       applied += 1
+    }
+    if (trimmed.length > 0) {
+      setStockNotice(
+        `Sin stock suficiente, se ha ajustado: ${trimmed.join(', ')}.`,
+      )
     }
     if (applied === 0) return
 
@@ -164,7 +199,36 @@ export default function NewOrderPage() {
     setImportedCount(applied)
     // replace, nunca push: un refresh no debe volver a aplicar los picks.
     router.replace('/orders/new')
-  }, [loadingCatalog, catalogError, products, searchParams, router])
+  }, [loadingCatalog, catalogError, products, stock, searchParams, router])
+
+  /**
+   * Único punto por el que cambia el carrito del paso 2: tarjetas, botón
+   * flotante, líneas, ficha en modal y tablet regalo pasan todos por aquí.
+   * Un cambio que suma unidades sin stock no se aplica y se avisa; quitar
+   * siempre se puede (guardStockChange).
+   */
+  function updateItems(next: CartLineState[]) {
+    if (stock) {
+      const check = guardStockChange(
+        toStockLines(items, products),
+        toStockLines(next, products),
+        stock,
+      )
+      if (!check.ok) {
+        setStockNotice(check.error)
+        return
+      }
+    }
+    setStockNotice(null)
+    setItems(next)
+  }
+
+  /** Stock de una tarjeta contando el carrito actual. */
+  function stockFor(product: Product) {
+    return stock
+      ? productStockState(product, toStockLines(items, products), stock)
+      : undefined
+  }
 
   function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -258,7 +322,7 @@ export default function NewOrderPage() {
       if (!product || !isFinanceableCode(product.code)) {
         return 'El producto seleccionado no es financiable.'
       }
-      return null
+      return stockError()
     }
     for (const it of filled) {
       const product = products.find((p) => p.id === it.product_id)
@@ -279,7 +343,18 @@ export default function NewOrderPage() {
         }
       }
     }
-    return null
+    return stockError()
+  }
+
+  /**
+   * Espejo cliente de la comprobación de stock de POST /api/orders. El stock
+   * puede haber bajado mientras se editaba: mejor saberlo aquí que al
+   * confirmar.
+   */
+  function stockError(): string | null {
+    if (!stock) return null
+    const check = validateStock(toStockLines(items, products), stock)
+    return check.ok ? null : check.error
   }
 
   // Paso 3 del wizard: datos del solicitante + cliente + envío.
@@ -721,6 +796,10 @@ export default function NewOrderPage() {
               ================================================================= */}
           {step === 2 && (
             <>
+              <StockNotice
+                message={stockNotice}
+                onClose={() => setStockNotice(null)}
+              />
               <div className={sectionClass}>
                 {importedCount > 0 && (
                   <div className="mb-4 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-800 ring-1 ring-blue-200">
@@ -757,14 +836,16 @@ export default function NewOrderPage() {
                     <FinancingCatalog
                       products={products}
                       items={items}
-                      onItemsChange={setItems}
+                      onItemsChange={updateItems}
                       vatRate={financingVatRate}
+                      stock={stock}
                     />
                   ) : (
                     <Step2Catalog
                       products={products}
                       items={items}
-                      onItemsChange={setItems}
+                      onItemsChange={updateItems}
+                      stockFor={stockFor}
                       vatRateOverride={previewVatOverride}
                       purchaseType={form.purchase_type}
                       discountGlobalPct={discountGlobalPct}

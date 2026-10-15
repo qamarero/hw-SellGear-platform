@@ -12,12 +12,19 @@ import { applySelectFinanced, type CartLineState } from '@/lib/catalog/rules'
 import CatalogRoot from '@/components/catalog/CatalogRoot'
 import ProductCard from '@/components/catalog/ProductCard'
 import ProductGrid from '@/components/catalog/ProductGrid'
+import { productStockState, type StockView } from '@/lib/stock/compute'
 
 interface FinancingCatalogProps {
   products: Product[]
   items: CartLineState[]
   onItemsChange: (items: CartLineState[]) => void
   vatRate: number
+  /**
+   * Stock (lib/stock). Elegir un producto REEMPLAZA al anterior, así que el
+   * de cada tarjeta se calcula sin carrito: si no, tener Pack Pro elegido
+   * restaría stock compartido a Pack Premium sin motivo.
+   */
+  stock?: StockView | null
 }
 
 /**
@@ -35,6 +42,7 @@ export default function FinancingCatalog({
   items,
   onItemsChange,
   vatRate,
+  stock = null,
 }: FinancingCatalogProps) {
   const financeable = useMemo(
     () =>
@@ -77,6 +85,7 @@ export default function FinancingCatalog({
               onAdd={() => onItemsChange(applySelectFinanced(p))}
               onInc={() => {}}
               onDec={() => onItemsChange([])}
+              stock={stock ? productStockState(p, [], stock) : undefined}
               footerExtra={
                 <div className="pack-comparison" style={{ marginTop: 16 }}>
                   <span>Total a financiar</span>
