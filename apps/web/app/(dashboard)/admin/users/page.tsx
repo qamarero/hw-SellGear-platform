@@ -43,8 +43,15 @@ type PasswordTarget = {
   email: string
 }
 
+/**
+ * `deactivated`: acceso bloqueado (ban de Supabase Auth). Es lo que queda de
+ * un usuario con historial al "eliminarlo": no puede entrar, pero sus pedidos
+ * y comentarios siguen diciendo quién los hizo.
+ */
+type AdminUser = UserProfile & { deactivated?: boolean }
+
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<UserProfile[]>([])
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -191,7 +198,12 @@ export default function AdminUsersPage() {
   }
 
   const handleDelete = async (userId: string, name: string) => {
-    if (!confirm(`¿Estas seguro de que quieres eliminar a "${name}"? Esta accion no se puede deshacer.`)) return
+    if (
+      !confirm(
+        `¿Eliminar a "${name}"?\n\nSi ya tiene pedidos, comentarios o historial en la app, se DESACTIVARÁ en su lugar: no podrá entrar, pero se conserva quién hizo cada cosa. Si no tiene nada, se borra del todo.`,
+      )
+    )
+      return
 
     setActionLoading(userId)
     try {
@@ -201,10 +213,45 @@ export default function AdminUsersPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      setUsers((prev) => prev.filter((u) => u.id !== userId))
-      showFeedback('success', 'Usuario eliminado correctamente')
+      if (data.deactivated) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, deactivated: true } : u)),
+        )
+        showFeedback(
+          'success',
+          `"${name}" tiene historial en la app: se ha desactivado y ya no puede entrar.`,
+        )
+      } else {
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
+        showFeedback('success', 'Usuario eliminado correctamente')
+      }
     } catch (err) {
       showFeedback('error', err instanceof Error ? err.message : 'Error al eliminar')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleSetActive = async (userId: string, name: string, active: boolean) => {
+    setActionLoading(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, deactivated: !active } : u)),
+      )
+      showFeedback(
+        'success',
+        active ? `"${name}" reactivado: ya puede entrar.` : `"${name}" desactivado.`,
+      )
+    } catch (err) {
+      showFeedback('error', err instanceof Error ? err.message : 'Error al cambiar el acceso')
     } finally {
       setActionLoading(null)
     }
@@ -304,6 +351,10 @@ export default function AdminUsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Gestion de Usuarios</h1>
           <p className="mt-1 text-sm text-gray-500">
             {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
+            {users.some((u) => u.deactivated) &&
+              ` · ${users.filter((u) => u.deactivated).length} desactivado${
+                users.filter((u) => u.deactivated).length !== 1 ? 's' : ''
+              }`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -391,15 +442,34 @@ export default function AdminUsersPage() {
                 </tr>
               ) : (
                 filtered.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={user.id}
+                    className={cn(
+                      'hover:bg-gray-50 transition-colors',
+                      user.deactivated && 'bg-gray-50/60 text-gray-400'
+                    )}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
                           {(user.full_name ?? user.email ?? '?').charAt(0).toUpperCase()}
                         </div>
-                        <span className="font-medium text-gray-900">
+                        <span
+                          className={cn(
+                            'font-medium',
+                            user.deactivated ? 'text-gray-500 line-through' : 'text-gray-900'
+                          )}
+                        >
                           {user.full_name ?? '(sin nombre)'}
                         </span>
+                        {user.deactivated && (
+                          <span
+                            className="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+                            title="No puede entrar. Se conserva su historial."
+                          >
+                            Desactivado
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{user.email ?? '—'}</td>
@@ -443,14 +513,27 @@ export default function AdminUsersPage() {
                         >
                           {actionLoading === user.id ? '...' : 'Reset pwd'}
                         </button>
-                        <button
-                          onClick={() => handleDelete(user.id, user.full_name ?? user.email ?? '')}
-                          disabled={actionLoading === user.id}
-                          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
-                          title="Eliminar usuario"
-                        >
-                          Eliminar
-                        </button>
+                        {user.deactivated ? (
+                          <button
+                            onClick={() =>
+                              handleSetActive(user.id, user.full_name ?? user.email ?? '', true)
+                            }
+                            disabled={actionLoading === user.id}
+                            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
+                            title="Devolverle el acceso"
+                          >
+                            Reactivar
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleDelete(user.id, user.full_name ?? user.email ?? '')}
+                            disabled={actionLoading === user.id}
+                            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+                            title="Eliminar usuario (se desactiva si tiene historial)"
+                          >
+                            Eliminar
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

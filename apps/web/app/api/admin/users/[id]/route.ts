@@ -6,6 +6,9 @@ import type { UserRole } from '@/types/database'
 
 const VALID_ROLES: UserRole[] = ['viewer', 'commercial', 'hardware', 'manager', 'admin']
 
+/** Ban de Supabase Auth para un usuario desactivado: ~100 años, "para siempre". */
+const DEACTIVATED_BAN = '876000h'
+
 async function verifyAdmin() {
   const supabase = await createClient()
   const {
@@ -37,8 +40,26 @@ export async function PUT(
   }
 
   const { id } = await params
-  const { supabase } = auth
+  const { supabase, user } = auth
   const body = await request.json()
+
+  // Reactivar / desactivar el acceso (ban de Supabase Auth). Es lo que usa
+  // un usuario con historial en lugar del borrado: ver DELETE.
+  if (typeof body.active === 'boolean') {
+    if (!body.active && id === user.id) {
+      return NextResponse.json(
+        { error: 'No puedes desactivar tu propia cuenta' },
+        { status: 400 },
+      )
+    }
+    const { error: banError } = await createAdminClient().auth.admin.updateUserById(id, {
+      ban_duration: body.active ? 'none' : DEACTIVATED_BAN,
+    })
+    if (banError) {
+      return NextResponse.json({ error: banError.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, deactivated: !body.active })
+  }
 
   const updates: Record<string, unknown> = {}
 
@@ -110,9 +131,30 @@ export async function DELETE(
   const adminClient = createAdminClient()
   const { error } = await adminClient.auth.admin.deleteUser(id)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!error) {
+    return NextResponse.json({ success: true, deactivated: false })
+  }
+  if (error.status === 404) {
+    return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
   }
 
-  return NextResponse.json({ success: true })
+  /*
+   * El borrado falla ("Database error deleting user") cuando el usuario ya ha
+   * hecho algo en la app: user_profiles cae en cascada al borrar auth.users,
+   * pero lo referencian sin ON DELETE orders.created_by/assigned_to,
+   * status_history.changed_by, comments.author_id, address_book.created_by y
+   * shipments.created_by. Borrarlo dejaría pedidos e historial sin autor, así
+   * que en ese caso se DESACTIVA: se le bloquea el acceso (ban de Supabase
+   * Auth) y se conserva todo lo que hizo. Se puede reactivar desde la lista.
+   */
+  const { error: banError } = await adminClient.auth.admin.updateUserById(id, {
+    ban_duration: DEACTIVATED_BAN,
+  })
+  if (banError) {
+    return NextResponse.json(
+      { error: `No se pudo borrar (${error.message}) ni desactivar: ${banError.message}` },
+      { status: 500 },
+    )
+  }
+  return NextResponse.json({ success: true, deactivated: true })
 }

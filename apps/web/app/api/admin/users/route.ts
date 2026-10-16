@@ -44,7 +44,31 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ users })
+  // Desactivados = con ban vigente en Supabase Auth (ver DELETE en [id]).
+  // No vive en user_profiles: se lee de auth, paginando (50 por página por
+  // defecto). Si falla, la lista sale igual, sin la marca.
+  const banned = new Set<string>()
+  try {
+    const admin = createAdminClient()
+    const now = Date.now()
+    for (let page = 1; page <= 20; page++) {
+      const { data, error: listError } = await admin.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      })
+      if (listError) break
+      for (const u of data.users) {
+        if (u.banned_until && new Date(u.banned_until).getTime() > now) banned.add(u.id)
+      }
+      if (data.users.length < 200) break
+    }
+  } catch (err) {
+    console.error('[admin/users] no se pudo leer el estado de acceso:', err)
+  }
+
+  return NextResponse.json({
+    users: (users ?? []).map((u) => ({ ...u, deactivated: banned.has(u.id) })),
+  })
 }
 
 export async function POST(request: NextRequest) {
