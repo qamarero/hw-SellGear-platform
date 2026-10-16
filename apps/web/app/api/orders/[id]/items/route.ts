@@ -186,7 +186,7 @@ export async function POST(
     // Reparto almacén / proveedor también para admins (ver POST /api/orders).
     const [allocation] = allocateStock([stockLine], stockView)
     supplierQty = allocation.fromSupplier
-    supplierWarning = supplierNote(allocation, qty)
+    supplierWarning = supplierNote(allocation, qty, product as Product)
 
     // Rango libre 0-100 entero; allows_discount = false fuerza 0.
     const discountPctRaw =

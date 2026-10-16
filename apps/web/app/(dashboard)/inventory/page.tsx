@@ -8,6 +8,7 @@ import {
   ENVIADO_RESERVE_DAYS,
   LOW_STOCK,
   isStockControlled,
+  isSupplierOnly,
   productAvailable,
 } from '@/lib/stock/compute'
 
@@ -89,8 +90,9 @@ export default async function InventoryPage() {
   // en pedidos de MainOps aún no descontados en HWToolbox). Ver lib/stock.
   const [snapshot, catalog] = await Promise.all([getStockSnapshot(), getCatalog()])
   const view = toStockView(snapshot, false)
+  // Canarias no sale del almacén (siempre a proveedor): no pinta aquí.
   const productRows = catalog
-    .filter((p) => isStockControlled(p))
+    .filter((p) => isStockControlled(p) && !isSupplierOnly(p))
     .map((p) => ({
       product: p,
       mapped: (view.components[p.code] ?? []).length > 0,
@@ -156,7 +158,8 @@ export default async function InventoryPage() {
               Lo que un comercial puede pedir ahora: disponible en HWToolbox menos
               lo vendido en pedidos que aún no tienen salida registrada. Los
               admins pueden pedir por encima, y los productos marcados «a
-              proveedor» nunca se bloquean: lo que falte se encarga.
+              proveedor» nunca se bloquean: lo que falte se encarga. Los de
+              Canarias no aparecen: se sirven siempre desde proveedor.
             </p>
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full">

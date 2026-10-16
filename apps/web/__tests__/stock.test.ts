@@ -298,6 +298,41 @@ describe('productos con proveedor', () => {
   })
 })
 
+describe('Canarias: siempre a proveedor', () => {
+  // Aunque tenga componentes (y haya stock), un SKU canario no tira del almacén.
+  const tpvCanarias = { ...p('tpv-pro-canarias'), region: 'canarias' as const }
+  const v = view({
+    components: { ...COMPONENTS, 'tpv-pro-canarias': [{ pool: 'tpv-pro', qty: 1 }] },
+  })
+
+  it('nunca bloquea y no tiene tope', () => {
+    expect(validateStock([L(tpvCanarias, 20)], view({ pools: {} }))).toEqual({ ok: true })
+    const s = productStockState(tpvCanarias, [], v)
+    expect(s.maxQty).toBe(Infinity)
+    expect(stockBadge(s)).toBe('A proveedor')
+  })
+
+  it('todo a proveedor, aunque haya stock y aunque el inventario esté caído', () => {
+    expect(allocateStock([L(tpvCanarias, 2)], v)[0]).toEqual({
+      fromStock: 0,
+      fromSupplier: 2,
+      unknown: false,
+    })
+    expect(allocateStock([L(tpvCanarias, 2)], { ...v, status: 'unavailable' })[0].fromStock).toBe(0)
+  })
+
+  it('no le quita stock a los peninsulares', () => {
+    expect(productStockState(tpvPro, [L(tpvCanarias, 5)], v).maxQty).toBe(3)
+  })
+
+  it('su nota dice Canarias y proveedor', () => {
+    const a = allocateStock([L(tpvCanarias, 1)], v)[0]
+    expect(supplierNote(a, 1, tpvCanarias)).toBe(
+      'Canarias: pedir a proveedor, no sale de nuestro almacén.',
+    )
+  })
+})
+
 describe('computePools', () => {
   const pools = [
     { key: 'tpv-pro', label: 'TPV Pro', article_ids: ['a-10pos', 'a-aqprox'] },

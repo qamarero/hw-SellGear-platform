@@ -153,16 +153,16 @@ export function formatItemsSummary(
 }
 
 /**
- * Añade al resumen de productos qué va a proveedor por falta de stock
- * ("Pack Premium ×1"), para que quien prepara el pedido lo vea en el mismo
- * aviso. Sin nada a proveedor devuelve el resumen tal cual.
+ * Añade al resumen de productos qué va a proveedor ("Pack Premium ×1"), por
+ * falta de stock o porque es de Canarias, para que quien prepara el pedido
+ * lo vea en el mismo aviso. Sin nada a proveedor devuelve el resumen tal cual.
  */
 export function withSupplierWarning(
   summary: string,
   toSupplier: readonly string[],
 ): string {
   if (toSupplier.length === 0) return summary
-  const warning = `:warning: *A pedir a proveedor (sin stock):* ${toSupplier.join(' · ')}`
+  const warning = `:warning: *A pedir a proveedor:* ${toSupplier.join(' · ')}`
   return summary ? `${summary}\n${warning}` : warning
 }
 

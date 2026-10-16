@@ -824,7 +824,7 @@ export default function NewOrderPage() {
                 {toSupplier.length > 0 && (
                   <div className="mb-4 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-800 ring-1 ring-blue-200">
                     <strong className="font-semibold">
-                      Se pedirá a proveedor por falta de stock:
+                      Se pedirá a proveedor:
                     </strong>{' '}
                     {toSupplier.join(' · ')}. Quien prepare el pedido lo verá en
                     la nota de cada línea.

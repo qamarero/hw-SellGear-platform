@@ -40,11 +40,12 @@ export default async function CatalogoLayout({
   return (
     <CatalogSelectionProvider
       stock={toStockView(snapshot, bypass)}
-      catalog={products.map(({ code, category, name, supplier_fallback }) => ({
+      catalog={products.map(({ code, category, name, supplier_fallback, region }) => ({
         code,
         category,
         name,
         supplier_fallback,
+        region,
       }))}
     >
       {children}

@@ -535,7 +535,7 @@ export async function POST(request: NextRequest) {
       vat_rate: line.vat_rate,
       supplier_qty: allocation[i].fromSupplier,
       notes:
-        [line.notes, supplierNote(allocation[i], line.qty)]
+        [line.notes, supplierNote(allocation[i], line.qty, stockLines[i].product)]
           .filter(Boolean)
           .join(' · ') || null,
     })),

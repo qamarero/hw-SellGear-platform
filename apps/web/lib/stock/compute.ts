@@ -61,7 +61,10 @@ export interface StockView {
 }
 
 /** Lo mínimo de un producto que necesita el cálculo de stock. */
-export type ProductRef = Pick<Product, 'code' | 'category' | 'name' | 'supplier_fallback'>
+export type ProductRef = Pick<
+  Product,
+  'code' | 'category' | 'name' | 'supplier_fallback' | 'region'
+>
 
 export interface StockLine {
   product: ProductRef
@@ -78,9 +81,18 @@ export function isStockControlled(p: Pick<Product, 'category'>): boolean {
  * y lo que falta va a proveedor — ver allocateStock.
  */
 export function isSupplierBacked(
-  p: Pick<Product, 'category' | 'supplier_fallback'>,
+  p: Pick<Product, 'category' | 'supplier_fallback' | 'region'>,
 ): boolean {
-  return isStockControlled(p) && p.supplier_fallback === true
+  return isStockControlled(p) && (p.supplier_fallback === true || isSupplierOnly(p))
+}
+
+/**
+ * Canarias se sirve SIEMPRE desde proveedor: nunca sale de nuestro almacén,
+ * así que no consume ni reserva stock, tenga o no componentes. Regla de
+ * código y no solo dato, para que un SKU canario nuevo nazca bien.
+ */
+export function isSupplierOnly(p: Pick<Product, 'region'>): boolean {
+  return p.region === 'canarias'
 }
 
 /**
@@ -176,7 +188,8 @@ export function productStockState(
 ): ProductStockState {
   const controlled = isStockControlled(product)
   const supplier = isSupplierBacked(product)
-  const available = productAvailable(product, view)
+  // Canarias no tira del almacén: aunque haya stock, para ella es 0.
+  const available = isSupplierOnly(product) ? 0 : productAvailable(product, view)
   const inCart = cart
     .filter((l) => l.product.code === product.code)
     .reduce((acc, l) => acc + l.qty, 0)
@@ -346,6 +359,10 @@ export function allocateStock(
     if (!isSupplierBacked(product)) {
       return { fromStock: qty, fromSupplier: 0, unknown: false }
     }
+    // Canarias: todo a proveedor, se sepa o no el stock.
+    if (isSupplierOnly(product)) {
+      return { fromStock: 0, fromSupplier: qty, unknown: false }
+    }
     if (view.status !== 'ok') {
       return { fromStock: qty, fromSupplier: 0, unknown: true }
     }
@@ -361,7 +378,14 @@ export function allocateStock(
  * Nota de la línea para quien prepara el pedido (order_items.notes), o null
  * si todo sale del almacén.
  */
-export function supplierNote(a: LineAllocation, qty: number): string | null {
+export function supplierNote(
+  a: LineAllocation,
+  qty: number,
+  product?: Pick<Product, 'region'>,
+): string | null {
+  if (product && isSupplierOnly(product)) {
+    return 'Canarias: pedir a proveedor, no sale de nuestro almacén.'
+  }
   if (a.unknown) {
     return 'Stock sin comprobar al crear la línea: confirmar si sale del almacén o se pide a proveedor.'
   }

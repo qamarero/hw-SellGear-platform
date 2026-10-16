@@ -61,7 +61,7 @@ export default function StockPill({ stock, variant = 'overlay' }: StockPillProps
       className={`${place} rounded px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${tone}`}
       title={
         toSupplier
-          ? 'Sin stock en el almacén: se encargará a proveedor.'
+          ? 'No sale de nuestro almacén: se encargará a proveedor.'
           : adminOverride
             ? 'Como admin puedes pedirlo igualmente.'
             : undefined
