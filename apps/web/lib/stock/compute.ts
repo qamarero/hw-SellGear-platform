@@ -20,6 +20,11 @@
 // pero sus pedidos reservan igual: lo hace get_stock_commitments, que no
 // distingue quién creó el pedido.
 //
+// Productos con proveedor (products.supplier_fallback): nunca bloquean. Se
+// sirven primero del almacén y lo que falta se encarga a proveedor; esas
+// unidades van a order_items.supplier_qty y no reservan stock. En el stock
+// compartido ceden ante los que no tienen alternativa.
+//
 // Módulo puro, sin 'use client' ni E/S: lo importan route handlers,
 // componentes y tests. La carga de datos vive en ./server.ts.
 // =============================================================
@@ -56,7 +61,7 @@ export interface StockView {
 }
 
 /** Lo mínimo de un producto que necesita el cálculo de stock. */
-export type ProductRef = Pick<Product, 'code' | 'category' | 'name'>
+export type ProductRef = Pick<Product, 'code' | 'category' | 'name' | 'supplier_fallback'>
 
 export interface StockLine {
   product: ProductRef
@@ -65,6 +70,27 @@ export interface StockLine {
 
 export function isStockControlled(p: Pick<Product, 'category'>): boolean {
   return !UNCONTROLLED.includes(p.category)
+}
+
+/**
+ * Producto que, sin stock suficiente, se pide a proveedor
+ * (products.supplier_fallback): nunca bloquea. Se sirve primero del almacén
+ * y lo que falta va a proveedor — ver allocateStock.
+ */
+export function isSupplierBacked(
+  p: Pick<Product, 'category' | 'supplier_fallback'>,
+): boolean {
+  return isStockControlled(p) && p.supplier_fallback === true
+}
+
+/**
+ * Líneas que SÍ dependen del almacén. Tienen prioridad sobre el stock
+ * compartido: los productos con proveedor ceden, porque tienen alternativa.
+ * (Pack Premium y una Impresora WiFi suelta comparten impresoras: la suelta
+ * no puede ir a proveedor, el pack sí.)
+ */
+function strictLines(lines: readonly StockLine[]): StockLine[] {
+  return lines.filter((l) => isStockControlled(l.product) && !isSupplierBacked(l.product))
 }
 
 /**
@@ -132,6 +158,8 @@ export function productAvailable(product: ProductRef, view: StockView): number {
 /** Estado de stock de un producto para pintar su tarjeta. */
 export interface ProductStockState {
   controlled: boolean
+  /** Sin stock se pide a proveedor: sin tope y nunca bloqueado. */
+  supplier: boolean
   /** Inventario caído: no se sabe cuánto hay. */
   unknown: boolean
   bypass: boolean
@@ -147,18 +175,21 @@ export function productStockState(
   view: StockView,
 ): ProductStockState {
   const controlled = isStockControlled(product)
+  const supplier = isSupplierBacked(product)
   const available = productAvailable(product, view)
   const inCart = cart
     .filter((l) => l.product.code === product.code)
     .reduce((acc, l) => acc + l.qty, 0)
-  const headroom = productHeadroom(product, demandByPool(cart, view), view)
+  // Solo las líneas de almacén restan: las de proveedor ceden el stock.
+  const headroom = productHeadroom(product, demandByPool(strictLines(cart), view), view)
   return {
     controlled,
+    supplier,
     unknown: controlled && view.status !== 'ok',
     bypass: view.bypass,
     available,
     maxQty:
-      view.bypass || !controlled
+      view.bypass || !controlled || supplier
         ? Number.POSITIVE_INFINITY
         : Math.max(0, inCart + headroom),
   }
@@ -167,6 +198,7 @@ export function productStockState(
 /** Texto corto del estado, o null si no hay nada que avisar. */
 export function stockBadge(s: ProductStockState): string | null {
   if (!s.controlled) return null
+  if (s.supplier && (s.unknown || s.available <= 0)) return 'A proveedor'
   if (s.unknown) return 'Stock sin comprobar'
   if (s.available <= 0) return 'Sin stock'
   if (s.available <= LOW_STOCK) return `Quedan ${s.available}`
@@ -192,7 +224,7 @@ export function stockLook(
   inCart: number,
 ): StockLook {
   if (!s || !s.controlled) return { blocked: false, blockedLabel: null, low: false }
-  const blocked = !s.bypass && inCart === 0 && s.maxQty <= 0
+  const blocked = !s.bypass && !s.supplier && inCart === 0 && s.maxQty <= 0
   return {
     blocked,
     blockedLabel: !blocked
@@ -214,6 +246,9 @@ const UNAVAILABLE_ERROR =
  * ¿Cabe este carrito en el stock? Cada producto se comprueba contra la
  * demanda del RESTO del carrito, porque comparten pools: 2 TPV Pro + 1 Pack
  * Pro con 2 TPV Pro pedibles no cabe aunque cada línea por sí sola sí.
+ *
+ * Los productos con proveedor nunca fallan, y tampoco restan a los demás:
+ * ceden el stock compartido (ver strictLines).
  */
 export function validateStock(
   lines: readonly StockLine[],
@@ -221,9 +256,9 @@ export function validateStock(
 ): StockCheck {
   if (view.bypass) return { ok: true }
 
+  const strict = strictLines(lines)
   const qtyByCode = new Map<string, { product: ProductRef; qty: number }>()
-  for (const l of lines) {
-    if (!isStockControlled(l.product)) continue
+  for (const l of strict) {
     const prev = qtyByCode.get(l.product.code)
     qtyByCode.set(l.product.code, {
       product: l.product,
@@ -234,7 +269,7 @@ export function validateStock(
   if (view.status !== 'ok') return { ok: false, error: UNAVAILABLE_ERROR }
 
   for (const { product, qty } of qtyByCode.values()) {
-    const others = lines.filter((l) => l.product.code !== product.code)
+    const others = strict.filter((l) => l.product.code !== product.code)
     const headroom = productHeadroom(product, demandByPool(others, view), view)
     if (qty <= headroom) continue
     const max = Math.max(0, headroom)
@@ -267,10 +302,11 @@ export function guardStockChange(
   view: StockView,
 ): StockCheck {
   if (view.bypass) return { ok: true }
+  // Solo cuentan los de almacén: subir un producto con proveedor nunca se
+  // bloquea, y como cede el stock tampoco puede dejar sin hueco a otro.
   const sum = (lines: readonly StockLine[]) => {
     const m = new Map<string, number>()
-    for (const l of lines) {
-      if (!isStockControlled(l.product)) continue
+    for (const l of strictLines(lines)) {
       m.set(l.product.code, (m.get(l.product.code) ?? 0) + l.qty)
     }
     return m
@@ -279,6 +315,60 @@ export function guardStockChange(
   const grew = [...sum(next)].some(([code, qty]) => qty > (before.get(code) ?? 0))
   if (!grew) return { ok: true }
   return validateStock(next, view)
+}
+
+/** Reparto de una línea entre almacén y proveedor. */
+export interface LineAllocation {
+  fromStock: number
+  fromSupplier: number
+  /** Inventario caído: no se sabe qué sale del almacén. */
+  unknown: boolean
+}
+
+/**
+ * Cuánto de cada línea sale del almacén y cuánto va a proveedor, en el mismo
+ * orden que `lines`.
+ *
+ *   · Líneas de almacén (y servicios): todo del almacén. Van primero: tienen
+ *     prioridad sobre el stock compartido.
+ *   · Líneas con proveedor: se sirve del almacén lo que quede, en orden, y el
+ *     resto va a proveedor.
+ *
+ * El servidor lo usa al crear la línea para fijar order_items.supplier_qty
+ * (que deja de reservar stock) y la nota para quien prepara el pedido.
+ */
+export function allocateStock(
+  lines: readonly StockLine[],
+  view: Pick<StockView, 'status' | 'pools' | 'components'>,
+): LineAllocation[] {
+  const demand = demandByPool(strictLines(lines), view)
+  return lines.map(({ product, qty }) => {
+    if (!isSupplierBacked(product)) {
+      return { fromStock: qty, fromSupplier: 0, unknown: false }
+    }
+    if (view.status !== 'ok') {
+      return { fromStock: qty, fromSupplier: 0, unknown: true }
+    }
+    const fromStock = Math.min(qty, Math.max(0, productHeadroom(product, demand, view)))
+    for (const c of view.components[product.code] ?? []) {
+      demand.set(c.pool, (demand.get(c.pool) ?? 0) + fromStock * c.qty)
+    }
+    return { fromStock, fromSupplier: qty - fromStock, unknown: false }
+  })
+}
+
+/**
+ * Nota de la línea para quien prepara el pedido (order_items.notes), o null
+ * si todo sale del almacén.
+ */
+export function supplierNote(a: LineAllocation, qty: number): string | null {
+  if (a.unknown) {
+    return 'Stock sin comprobar al crear la línea: confirmar si sale del almacén o se pide a proveedor.'
+  }
+  if (a.fromSupplier <= 0) return null
+  return a.fromSupplier === qty
+    ? 'A pedir a proveedor: sin stock en almacén.'
+    : `A pedir a proveedor: ${a.fromSupplier} de ${qty} ud. (sin stock suficiente en almacén).`
 }
 
 // -------------------------------------------------------------

@@ -35,7 +35,8 @@ interface StockPillProps {
  * procedencia).
  *
  * Un admin ve el mismo aviso, pero su botón sigue activo: el título lo dice
- * para que no parezca un error.
+ * para que no parezca un error. "A proveedor" va en azul: no es un problema,
+ * es otra vía de servirlo, y no debe confundirse con el rojo de "Sin stock".
  */
 export default function StockPill({ stock, variant = 'overlay' }: StockPillProps) {
   if (!stock) return null
@@ -43,25 +44,31 @@ export default function StockPill({ stock, variant = 'overlay' }: StockPillProps
   if (!label) return null
 
   const empty = stock.unknown || stock.available <= 0
-  const tone = stock.unknown
-    ? 'bg-gray-700 text-white'
-    : empty
-      ? 'bg-red-600 text-white'
-      : 'bg-amber-100 text-amber-900 ring-1 ring-amber-300'
+  const toSupplier = stock.supplier && empty
+  const tone = toSupplier
+    ? 'bg-blue-600 text-white'
+    : stock.unknown
+      ? 'bg-gray-700 text-white'
+      : empty
+        ? 'bg-red-600 text-white'
+        : 'bg-amber-100 text-amber-900 ring-1 ring-amber-300'
   const place =
     variant === 'overlay' ? 'absolute bottom-3 left-3 z-[1]' : 'inline-flex'
+  const adminOverride = stock.bypass && empty && !toSupplier
 
   return (
     <span
       className={`${place} rounded px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${tone}`}
       title={
-        stock.bypass && empty
-          ? 'Como admin puedes pedirlo igualmente.'
-          : undefined
+        toSupplier
+          ? 'Sin stock en el almacén: se encargará a proveedor.'
+          : adminOverride
+            ? 'Como admin puedes pedirlo igualmente.'
+            : undefined
       }
     >
       {label}
-      {stock.bypass && empty ? ' · admin' : ''}
+      {adminOverride ? ' · admin' : ''}
     </span>
   )
 }

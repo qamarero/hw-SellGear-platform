@@ -155,7 +155,8 @@ export default async function InventoryPage() {
             <p className="mt-1 mb-3 text-xs text-gray-500">
               Lo que un comercial puede pedir ahora: disponible en HWToolbox menos
               lo vendido en pedidos que aún no tienen salida registrada. Los
-              admins pueden pedir por encima.
+              admins pueden pedir por encima, y los productos marcados «a
+              proveedor» nunca se bloquean: lo que falte se encarga.
             </p>
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full">
@@ -179,11 +180,18 @@ export default async function InventoryPage() {
                             sin artículo en HWToolbox
                           </span>
                         )}
+                        {product.supplier_fallback && (
+                          <span className="ml-2 text-xs text-blue-700">
+                            · si falta, a proveedor
+                          </span>
+                        )}
                       </td>
                       <td
                         className={`px-4 py-2.5 text-right font-mono text-sm font-semibold ${
                           orderable <= 0
-                            ? 'text-red-600'
+                            ? product.supplier_fallback
+                              ? 'text-blue-700'
+                              : 'text-red-600'
                             : orderable <= LOW_STOCK
                               ? 'text-amber-700'
                               : 'text-gray-900'

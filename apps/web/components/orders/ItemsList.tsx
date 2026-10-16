@@ -287,6 +287,16 @@ export default function ItemsList({
                 <tr key={item.id} className="group">
                   <td className="px-5 py-3 text-sm text-gray-900">
                     {item.product_name ?? '(sin nombre)'}
+                    {/* Para quien prepara el envío: estas unidades no salen
+                        del almacén, hay que encargarlas (lib/stock). */}
+                    {(item.supplier_qty ?? 0) > 0 && (
+                      <span
+                        className="ml-2 inline-flex rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+                        title="Sin stock en el almacén al crear la línea: encargar a proveedor."
+                      >
+                        A proveedor ×{item.supplier_qty}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-center text-sm text-gray-700">
                     {item.qty}

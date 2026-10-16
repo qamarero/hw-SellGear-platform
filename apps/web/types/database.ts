@@ -117,6 +117,11 @@ export interface Product {
   pricing_mode?: ProductPricingMode
   /** FALSE ⇒ la línea no admite `discount_pct` distinto de 0. */
   allows_discount?: boolean
+  /**
+   * TRUE ⇒ sin stock suficiente se pide a proveedor: nunca se bloquea por
+   * stock (20261016000001). Ver lib/stock/compute.ts.
+   */
+  supplier_fallback?: boolean
 
   // ── Listas y estructuras ordenadas
   highlights?: string[]
@@ -340,6 +345,8 @@ export interface OrderItem {
   unit_price_cents: number | null
   discount_pct: number | null
   vat_rate: number | null
+  /** Unidades que van a proveedor por falta de stock (20261016000001). */
+  supplier_qty?: number
   product?: Product | null
 }
 

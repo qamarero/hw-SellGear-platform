@@ -622,15 +622,19 @@ function CatalogTab({
                             {badge && (
                               <span
                                 className={`block text-[11px] font-semibold ${
-                                  s && (s.unknown || s.available <= 0)
-                                    ? 'text-red-600'
-                                    : 'text-amber-700'
+                                  s?.supplier && (s.unknown || s.available <= 0)
+                                    ? 'text-blue-700'
+                                    : s && (s.unknown || s.available <= 0)
+                                      ? 'text-red-600'
+                                      : 'text-amber-700'
                                 }`}
                               >
                                 {badge}
-                                {s?.bypass && (s.unknown || s.available <= 0)
-                                  ? ' · puedes pedirlo como admin'
-                                  : ''}
+                                {s?.supplier && (s.unknown || s.available <= 0)
+                                  ? ' · sin stock, se encarga'
+                                  : s?.bypass && (s.unknown || s.available <= 0)
+                                    ? ' · puedes pedirlo como admin'
+                                    : ''}
                               </span>
                             )}
                           </span>

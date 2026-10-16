@@ -42,7 +42,7 @@ import {
   missingPriceError,
   canaryShippingError,
 } from '@/lib/product-rules'
-import { validateStock } from '@/lib/stock/compute'
+import { allocateStock, supplierNote, validateStock } from '@/lib/stock/compute'
 import { canBypassStock, loadStockSnapshot, toStockView } from '@/lib/stock/server'
 
 export const runtime = 'nodejs'
@@ -136,6 +136,10 @@ export async function POST(
   let resolvedUnitPriceCents: number
   let resolvedDiscountPct = 0
   let resolvedVatRate: number
+  // Unidades que van a proveedor por falta de stock, y su aviso para quien
+  // prepara el pedido. Solo productos con supplier_fallback.
+  let supplierQty = 0
+  let supplierWarning: string | null = null
 
   if (source === 'catalog') {
     // Catálogo: requiere product_id, valida activo + descuento.
@@ -171,15 +175,18 @@ export async function POST(
     // Stock: la línea nueva tiene que caber en lo pedible. Las líneas que el
     // pedido ya tiene no se vuelven a sumar: si está abierto, ya cuentan
     // como comprometidas. La tablet regalo del modal entra por aquí también.
+    const stockView = toStockView(await loadStockSnapshot(), false)
+    const stockLine = { product: product as Product, qty }
     if (!canBypassStock(user.email, role)) {
-      const stockCheck = validateStock(
-        [{ product: product as Product, qty }],
-        toStockView(await loadStockSnapshot(), false),
-      )
+      const stockCheck = validateStock([stockLine], stockView)
       if (!stockCheck.ok) {
         return NextResponse.json({ error: stockCheck.error }, { status: 409 })
       }
     }
+    // Reparto almacén / proveedor también para admins (ver POST /api/orders).
+    const [allocation] = allocateStock([stockLine], stockView)
+    supplierQty = allocation.fromSupplier
+    supplierWarning = supplierNote(allocation, qty)
 
     // Rango libre 0-100 entero; allows_discount = false fuerza 0.
     const discountPctRaw =
@@ -289,7 +296,8 @@ export async function POST(
       discount_pct: resolvedDiscountPct,
       unit_price_cents: resolvedUnitPriceCents,
       vat_rate: resolvedVatRate,
-      notes,
+      supplier_qty: supplierQty,
+      notes: [notes, supplierWarning].filter(Boolean).join(' · ') || null,
     })
     .select('*')
     .single()

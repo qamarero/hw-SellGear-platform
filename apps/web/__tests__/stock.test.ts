@@ -13,8 +13,10 @@
 import { describe, it, expect } from 'vitest'
 import type { ProductCategory } from '@/types/database'
 import {
+  allocateStock,
   computePools,
   demandByPool,
+  supplierNote,
   guardStockChange,
   productHeadroom,
   productStockState,
@@ -229,6 +231,70 @@ describe('stockLook', () => {
       blockedLabel: null,
       low: false,
     })
+  })
+})
+
+describe('productos con proveedor', () => {
+  // Pack con proveedor que comparte TPV Pro con el TPV suelto (sin proveedor).
+  const packProv = { ...p('pack-prov', 'pack'), supplier_fallback: true }
+  const sensorProv = { ...p('sensor-prov', 'accessory'), supplier_fallback: true }
+  const v = view({
+    components: { ...COMPONENTS, 'pack-prov': [{ pool: 'tpv-pro', qty: 1 }] },
+  })
+
+  it('nunca bloquean, ni sin stock ni sin artículo', () => {
+    const empty = view({ pools: { 'tpv-pro': 0 }, components: v.components })
+    expect(validateStock([L(packProv, 5), L(sensorProv, 2)], empty)).toEqual({ ok: true })
+    const s = productStockState(packProv, [], empty)
+    expect(s.maxQty).toBe(Infinity)
+    expect(stockBadge(s)).toBe('A proveedor')
+    expect(stockLook(s, 0).blocked).toBe(false)
+  })
+
+  it('no le quitan stock a los productos sin proveedor', () => {
+    // 3 TPV pedibles: el pack con proveedor cede y los 3 TPV sueltos caben.
+    expect(validateStock([L(packProv, 3), L(tpvPro, 3)], v)).toEqual({ ok: true })
+    expect(productStockState(tpvPro, [L(packProv, 3)], v).maxQty).toBe(3)
+  })
+
+  it('subir un producto con proveedor no lo frena la guarda', () => {
+    expect(guardStockChange([L(packProv, 1)], [L(packProv, 9)], v)).toEqual({ ok: true })
+  })
+
+  it('se sirve primero del almacén y lo que falta va a proveedor', () => {
+    // 3 TPV pedibles, 1 TPV suelto (prioritario) -> quedan 2 para el pack de 5.
+    const a = allocateStock([L(packProv, 5), L(tpvPro, 1)], v)
+    expect(a[0]).toEqual({ fromStock: 2, fromSupplier: 3, unknown: false })
+    expect(a[1]).toEqual({ fromStock: 1, fromSupplier: 0, unknown: false })
+  })
+
+  it('sin artículo en el almacén: todo a proveedor', () => {
+    expect(allocateStock([L(sensorProv, 2)], v)[0]).toEqual({
+      fromStock: 0,
+      fromSupplier: 2,
+      unknown: false,
+    })
+  })
+
+  it('dos líneas con proveedor se reparten el stock en orden', () => {
+    const a = allocateStock([L(packProv, 2), L(packProv, 2)], v)
+    expect(a.map((x) => x.fromSupplier)).toEqual([0, 1])
+  })
+
+  it('inventario caído: no se sabe, se marca para confirmar', () => {
+    const a = allocateStock([L(packProv, 2)], { ...v, status: 'unavailable' })
+    expect(a[0]).toEqual({ fromStock: 2, fromSupplier: 0, unknown: true })
+    expect(supplierNote(a[0], 2)).toMatch(/confirmar/)
+  })
+
+  it('notas para quien prepara el pedido', () => {
+    expect(supplierNote({ fromStock: 2, fromSupplier: 0, unknown: false }, 2)).toBeNull()
+    expect(supplierNote({ fromStock: 0, fromSupplier: 2, unknown: false }, 2)).toBe(
+      'A pedir a proveedor: sin stock en almacén.',
+    )
+    expect(supplierNote({ fromStock: 1, fromSupplier: 2, unknown: false }, 3)).toBe(
+      'A pedir a proveedor: 2 de 3 ud. (sin stock suficiente en almacén).',
+    )
   })
 })
 

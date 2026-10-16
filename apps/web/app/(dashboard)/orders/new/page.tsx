@@ -21,6 +21,7 @@ import { isFinanceableCode } from '@/lib/financing'
 import { SELECTION_PARAM, parseCatalogPicks } from '@/lib/catalog/order-link'
 import { applyAddProduct } from '@/lib/catalog/rules'
 import {
+  allocateStock,
   demandByPool,
   guardStockChange,
   productHeadroom,
@@ -222,6 +223,18 @@ export default function NewOrderPage() {
     setStockNotice(null)
     setItems(next)
   }
+
+  /**
+   * Lo que, con el stock de ahora, se encargará a proveedor ("Pack Premium
+   * ×1"). Es un aviso: el reparto definitivo lo hace el servidor al crear el
+   * pedido y lo deja en la nota de cada línea.
+   */
+  const stockLines = stock ? toStockLines(items, products) : []
+  const toSupplier = stock
+    ? allocateStock(stockLines, stock).flatMap((a, i) =>
+        a.fromSupplier > 0 ? [`${stockLines[i].product.name} ×${a.fromSupplier}`] : [],
+      )
+    : []
 
   /** Stock de una tarjeta contando el carrito actual. */
   function stockFor(product: Product) {
@@ -806,6 +819,15 @@ export default function NewOrderPage() {
                     {importedCount}{' '}
                     {importedCount === 1 ? 'producto' : 'productos'} traídos del
                     catálogo. Revisa la selección antes de continuar.
+                  </div>
+                )}
+                {toSupplier.length > 0 && (
+                  <div className="mb-4 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-800 ring-1 ring-blue-200">
+                    <strong className="font-semibold">
+                      Se pedirá a proveedor por falta de stock:
+                    </strong>{' '}
+                    {toSupplier.join(' · ')}. Quien prepare el pedido lo verá en
+                    la nota de cada línea.
                   </div>
                 )}
                 <div className="mb-4">

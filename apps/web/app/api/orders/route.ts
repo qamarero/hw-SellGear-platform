@@ -27,8 +27,18 @@ import {
   financingBaseTotalCents,
   financingInstallments,
 } from '@/lib/financing'
-import { notifyOrderEvent, formatItemsSummary } from '@/lib/slack'
-import { demandByPool, validateStock, type StockLine } from '@/lib/stock/compute'
+import {
+  notifyOrderEvent,
+  formatItemsSummary,
+  withSupplierWarning,
+} from '@/lib/slack'
+import {
+  allocateStock,
+  demandByPool,
+  supplierNote,
+  validateStock,
+  type StockLine,
+} from '@/lib/stock/compute'
 import { canBypassStock, loadStockSnapshot, toStockView } from '@/lib/stock/server'
 
 /**
@@ -449,15 +459,17 @@ export async function POST(request: NextRequest) {
     product: productMap.get(l.product_id)!,
     qty: l.qty,
   }))
+  const stockView = toStockView(await loadStockSnapshot(), false)
   if (!stockBypass) {
-    const stockCheck = validateStock(
-      stockLines,
-      toStockView(await loadStockSnapshot(), false),
-    )
+    const stockCheck = validateStock(stockLines, stockView)
     if (!stockCheck.ok) {
       return NextResponse.json({ error: stockCheck.error }, { status: 409 })
     }
   }
+  // Reparto almacén / proveedor, para TODOS (también admins): quien prepara
+  // el pedido tiene que saber qué se encarga a proveedor lo pida quien lo
+  // pida. Mismo orden que `resolved`.
+  const allocation = allocateStock(stockLines, stockView)
 
   // Total con IVA en céntimos → euros (compat orders.amount).
   // Aplicamos también el descuento global (%) sobre la base agregada.
@@ -510,8 +522,10 @@ export async function POST(request: NextRequest) {
   }
 
   // 6. Insert items con snapshot de precio, IVA, descuento y product_id.
+  // supplier_qty: unidades que van a proveedor (no reservan stock). La nota
+  // lo repite en texto, que es lo que lee quien prepara el envío.
   const { error: itemsError } = await admin.from('order_items').insert(
-    resolved.map((line) => ({
+    resolved.map((line, i) => ({
       order_id: newOrder.id,
       product_id: line.product_id,
       product_name: line.product_name,
@@ -519,7 +533,11 @@ export async function POST(request: NextRequest) {
       discount_pct: line.discount_pct,
       unit_price_cents: line.unit_price_cents,
       vat_rate: line.vat_rate,
-      notes: line.notes,
+      supplier_qty: allocation[i].fromSupplier,
+      notes:
+        [line.notes, supplierNote(allocation[i], line.qty)]
+          .filter(Boolean)
+          .join(' · ') || null,
     })),
   )
 
@@ -533,10 +551,16 @@ export async function POST(request: NextRequest) {
   // cascada) ANTES de pagos, historial y Slack, y se avisa al comercial.
   if (!stockBypass && !itemsError) {
     const after = toStockView(await loadStockSnapshot(), false)
+    // Solo los pools de lo que sale del almacén: lo que va a proveedor no
+    // reserva y no puede "sobrevender" nada.
+    const fromStock = stockLines.map((l, i) => ({
+      product: l.product,
+      qty: allocation[i].fromStock,
+    }))
     const oversold =
       after.status === 'ok' &&
-      [...demandByPool(stockLines, after).keys()].some(
-        (pool) => (after.pools[pool] ?? 0) < 0,
+      [...demandByPool(fromStock, after)].some(
+        ([pool, units]) => units > 0 && (after.pools[pool] ?? 0) < 0,
       )
     if (oversold) {
       const { error: rollbackError } = await admin
@@ -637,8 +661,15 @@ export async function POST(request: NextRequest) {
     purchase_type: purchaseType,
     amount_cents: Math.round(computedAmount * 100),
     requester_slack_user_id: requesterSlackUserId,
-    items_summary: formatItemsSummary(
-      resolved.map((r) => ({ product_name: r.product_name, qty: r.qty })),
+    items_summary: withSupplierWarning(
+      formatItemsSummary(
+        resolved.map((r) => ({ product_name: r.product_name, qty: r.qty })),
+      ),
+      resolved.flatMap((r, i) =>
+        allocation[i].fromSupplier > 0
+          ? [`${r.product_name} ×${allocation[i].fromSupplier}`]
+          : [],
+      ),
     ),
     shipping_city: req.shipping ? shippingCity || null : null,
     shipping_cp: req.shipping ? shippingCp || null : null,
