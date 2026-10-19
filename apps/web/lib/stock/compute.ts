@@ -330,6 +330,24 @@ export function guardStockChange(
   return validateStock(next, view)
 }
 
+/**
+ * Unidades de `product` que entran al añadir `qty` a un carrito sin pasar
+ * por guardStockChange: el puente /catalogo → wizard, que llega con las
+ * cantidades ya elegidas. Los productos con proveedor entran enteros (lo que
+ * no haya en almacén se encarga, ver allocateStock); el resto se recorta a
+ * lo pedible, descontando solo las líneas de almacén del carrito.
+ */
+export function clampToStock(
+  product: ProductRef,
+  qty: number,
+  cart: readonly StockLine[],
+  view: StockView,
+): number {
+  if (view.bypass || isSupplierBacked(product)) return qty
+  const room = productHeadroom(product, demandByPool(strictLines(cart), view), view)
+  return Math.min(qty, Math.max(0, room))
+}
+
 /** Reparto de una línea entre almacén y proveedor. */
 export interface LineAllocation {
   fromStock: number

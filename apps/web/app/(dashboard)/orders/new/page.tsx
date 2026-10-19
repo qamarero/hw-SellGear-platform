@@ -22,9 +22,8 @@ import { SELECTION_PARAM, parseCatalogPicks } from '@/lib/catalog/order-link'
 import { applyAddProduct } from '@/lib/catalog/rules'
 import {
   allocateStock,
-  demandByPool,
+  clampToStock,
   guardStockChange,
-  productHeadroom,
   productStockState,
   toStockLines,
   validateStock,
@@ -177,12 +176,11 @@ export default function NewOrderPage() {
       if (!product) continue
       // El stock puede haber cambiado desde que se eligió en /catalogo: se
       // recorta a lo pedible y se avisa, en vez de traer un carrito que el
-      // servidor va a rechazar.
+      // servidor va a rechazar. Los productos con proveedor no se recortan:
+      // lo que falte en almacén se encarga a proveedor (clampToStock).
       let qty = pick.qty
-      if (stock && !stock.bypass) {
-        const lines = toStockLines(next, products)
-        const room = productHeadroom(product, demandByPool(lines, stock), stock)
-        qty = Math.min(qty, Math.max(0, room))
+      if (stock) {
+        qty = clampToStock(product, pick.qty, toStockLines(next, products), stock)
         if (qty < pick.qty) trimmed.push(product.name)
       }
       if (qty <= 0) continue

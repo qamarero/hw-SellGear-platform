@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest'
 import type { ProductCategory } from '@/types/database'
 import {
   allocateStock,
+  clampToStock,
   computePools,
   demandByPool,
   supplierNote,
@@ -330,6 +331,43 @@ describe('Canarias: siempre a proveedor', () => {
     expect(supplierNote(a, 1, tpvCanarias)).toBe(
       'Canarias: pedir a proveedor, no sale de nuestro almacén.',
     )
+  })
+})
+
+describe('clampToStock (puente /catalogo → wizard)', () => {
+  const packProv = { ...p('pack-prov', 'pack'), supplier_fallback: true }
+  const sensorProv = { ...p('sensor-prov', 'accessory'), supplier_fallback: true }
+  const tpvCanarias = { ...p('tpv-pro-canarias'), region: 'canarias' as const }
+  const v = view({
+    components: { ...COMPONENTS, 'pack-prov': [{ pool: 'tpv-pro', qty: 1 }] },
+  })
+  const empty = view({ pools: { 'tpv-pro': 0 }, components: v.components })
+
+  it('los productos con proveedor entran enteros aunque no haya stock', () => {
+    expect(clampToStock(packProv, 4, [], empty)).toBe(4)
+    expect(clampToStock(sensorProv, 2, [], v)).toBe(2) // sin artículo
+    expect(clampToStock(tpvCanarias, 3, [], empty)).toBe(3)
+  })
+
+  it('los de almacén se recortan a lo pedible', () => {
+    expect(clampToStock(tpvPro, 5, [], v)).toBe(3)
+    expect(clampToStock(tpvPro, 2, [], empty)).toBe(0)
+  })
+
+  it('descuenta las líneas de almacén del carrito, no las de proveedor', () => {
+    expect(clampToStock(tpvPro, 5, [L(packPro, 2)], v)).toBe(1)
+    expect(clampToStock(tpvPro, 3, [L(packProv, 3)], v)).toBe(3)
+  })
+
+  it('inventario caído: almacén a 0, proveedor entero', () => {
+    const down = { ...v, status: 'unavailable' as const }
+    expect(clampToStock(tpvPro, 2, [], down)).toBe(0)
+    expect(clampToStock(packProv, 2, [], down)).toBe(2)
+  })
+
+  it('admin y servicios: sin recorte', () => {
+    expect(clampToStock(tpvPro, 9, [], view({ bypass: true, pools: {} }))).toBe(9)
+    expect(clampToStock(implPro, 2, [], empty)).toBe(2)
   })
 })
 
