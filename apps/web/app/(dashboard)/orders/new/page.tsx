@@ -17,7 +17,7 @@ import CartSummary from '@/components/orders/CartSummary'
 import Step2Catalog from '@/components/orders/Step2Catalog'
 import FinancingCatalog from '@/components/orders/FinancingCatalog'
 import FinancingSummary from '@/components/orders/FinancingSummary'
-import { isFinanceableCode } from '@/lib/financing'
+import { FINANCEABLE_LABEL, isFinanceableCode } from '@/lib/financing'
 import { SELECTION_PARAM, parseCatalogPicks } from '@/lib/catalog/order-link'
 import { applyAddProduct } from '@/lib/catalog/rules'
 import {
@@ -834,7 +834,7 @@ export default function NewOrderPage() {
                   </h2>
                   <p className="mt-0.5 text-xs text-gray-500">
                     {isFinancing
-                      ? 'Solo Pack Pro, Pack Premium y KDS Estándar admiten financiación. Selecciona uno.'
+                      ? `Solo ${FINANCEABLE_LABEL} admiten financiación. Selecciona uno.`
                       : 'Selecciona productos del catálogo Qamarero 2026 o añade una línea libre.'}
                   </p>
                 </div>

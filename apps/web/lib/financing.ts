@@ -1,10 +1,16 @@
 // =============================================================
 // Planes de financiación de hardware.
 //
-// Solo 3 productos del catálogo son financiables. Cada uno tiene un
-// plan de 3 pagos. Los importes son BASE (s/IVA) en céntimos; la UI y
-// el servidor les suman IVA (21 % peninsular, 0 % Canarias, misma regla
-// que el resto vía isCanaryIslands).
+// Solo 4 productos del catálogo son financiables (los mismos que en el
+// catálogo web). Cada uno tiene un plan de 3 pagos. Los importes son BASE
+// (s/IVA) en céntimos; la UI y el servidor les suman IVA (21 % peninsular,
+// 0 % Canarias, misma regla que el resto vía isCanaryIslands).
+//
+// Las bases se eligen para que cada plazo CON IVA dé la cifra comercial
+// (p.ej. 249,90) y, a la vez, que la suma de plazos coincida al céntimo con
+// el total del pedido (IVA sobre la base total). Las dos cosas no siempre
+// caben: en KDS Pro la entrada es 514,89 y no 514,90, decisión de negocio
+// del 2026-10-21 para que todo cuadre.
 //
 // Decisión de negocio (2026-05-27): financiar es más caro que pagar al
 // contado. El total del plan REEMPLAZA al precio de catálogo en los
@@ -16,14 +22,26 @@ import { lineVatCents } from '@/lib/pricing'
 
 /** Importes BASE (s/IVA) por etapa, en céntimos. [entrada, plazo2, plazo3]. */
 export const FINANCING_PLANS = {
+  // 605 + 272,25 + 272,25 = 1.149,50 con IVA
   'pack-pro': [50000, 22500, 22500],
+  // 845,79 + 423,50 + 423,50 = 1.692,79 con IVA
   'pack-premium': [69900, 35000, 35000],
-  'kds-estandar': [39000, 19000, 19000],
+  // KDS Pro (693 € contado): 514,89 + 249,90 + 249,90 = 1.014,69 con IVA
+  'kds-pro': [42553, 20653, 20653],
+  // KDS Premium (963 € contado): 714,90 + 347,90 + 347,90 = 1.410,70 con IVA
+  'kds-premium': [59083, 28752, 28752],
 } as const satisfies Record<string, readonly [number, number, number]>
 
 export type FinanceableCode = keyof typeof FINANCING_PLANS
 
 export const FINANCEABLE_CODES: readonly string[] = Object.keys(FINANCING_PLANS)
+
+/**
+ * Cómo se nombran en pantalla y en errores. Una sola cadena: antes estaba
+ * escrita a mano en el wizard, en POST /api/orders y en FinancingCatalog, y
+ * al cambiar la gama se habría quedado vieja en alguno.
+ */
+export const FINANCEABLE_LABEL = 'Pack Pro, Pack Premium, KDS Pro y KDS Premium'
 
 export function isFinanceableCode(code: string): code is FinanceableCode {
   return code in FINANCING_PLANS

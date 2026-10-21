@@ -23,6 +23,7 @@ import {
   canaryShippingError,
 } from '@/lib/product-rules'
 import {
+  FINANCEABLE_LABEL,
   isFinanceableCode,
   financingBaseTotalCents,
   financingInstallments,
@@ -399,8 +400,7 @@ export async function POST(request: NextRequest) {
       if (!isFinanceableCode(product.code)) {
         return NextResponse.json(
           {
-            error:
-              'Producto no financiable. Solo Pack Pro, Pack Premium y KDS Estándar admiten financiación.',
+            error: `Producto no financiable. Solo ${FINANCEABLE_LABEL} admiten financiación.`,
           },
           { status: 400 },
         )

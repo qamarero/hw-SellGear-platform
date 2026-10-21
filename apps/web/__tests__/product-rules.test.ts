@@ -254,9 +254,12 @@ describe('productRules (struct agregado)', () => {
     })
   })
 
-  it('marca financiable solo los 3 del plan', () => {
+  it('marca financiable solo los del plan', () => {
     expect(productRules({ code: 'pack-pro', category: 'pack' }).financeable).toBe(true)
-    expect(productRules({ code: 'kds-estandar', category: 'kds' }).financeable).toBe(true)
+    expect(productRules({ code: 'kds-pro', category: 'kds' }).financeable).toBe(true)
+    expect(productRules({ code: 'kds-premium', category: 'kds' }).financeable).toBe(true)
+    // Desde el 2026-10-21 el KDS Standard ya no se financia (como en la web).
+    expect(productRules({ code: 'kds-estandar', category: 'kds' }).financeable).toBe(false)
     expect(productRules(catalogProduct).financeable).toBe(false)
   })
 })

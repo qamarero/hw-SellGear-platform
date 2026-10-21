@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { Product } from '@/types/database'
 import { formatEurosCents } from '@/lib/pricing'
 import {
+  FINANCEABLE_LABEL,
   financingBaseTotalCents,
   financingInstallments,
   isFinanceableCode,
@@ -28,10 +29,10 @@ interface FinancingCatalogProps {
 }
 
 /**
- * Catálogo de financiación: selección ÚNICA entre los 3 productos con plan.
+ * Catálogo de financiación: selección ÚNICA entre los productos con plan.
  *
  * Comparte ProductCard con el resto del catálogo, pero no pasa por
- * CatalogExplorer: con 3 productos, un buscador y 8 pestañas serían ruido.
+ * CatalogExplorer: con 4 productos, un buscador y 8 pestañas serían ruido.
  *
  * El plan de plazos se pinta en el pie con el mismo patrón visual que el
  * desglose de un pack (`.pack-price-breakdown`): lista con borde superior y
@@ -57,8 +58,8 @@ export default function FinancingCatalog({
   if (financeable.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-        No hay productos financiables en el catálogo. Revisa que Pack Pro, Pack
-        Premium y KDS Estándar estén activos.
+        No hay productos financiables en el catálogo. Revisa que {FINANCEABLE_LABEL}{' '}
+        estén activos.
       </div>
     )
   }
