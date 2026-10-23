@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, X } from 'lucide-react'
+import AddressPicker from '@/components/address-book/AddressPicker'
 import { PICKUP_REASON_LABELS } from '@/lib/pickups/status'
-import type { PickupDestinationType, PickupReason } from '@/types/database'
+import type { AddressBookEntry, PickupDestinationType, PickupReason } from '@/types/database'
 
 interface NewPickupModalProps {
   onClose: () => void
@@ -14,6 +15,10 @@ const INPUT =
   'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
 
 const MANUAL_REASONS: PickupReason[] = ['devolucion', 'baja', 'cambio', 'rma', 'otro']
+
+// Mismo boton que «Cargar de agenda» en ShipmentForm.
+const AGENDA_BUTTON =
+  'rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
 
 /**
  * Alta manual: recogidas que no vienen de un RMA de HSM (devoluciones de
@@ -30,14 +35,36 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
   const [instructions, setInstructions] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState<null | 'pickup' | 'sat'>(null)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !loading) onClose()
+      // Con la agenda abierta, Escape cierra solo la agenda.
+      if (e.key === 'Escape' && !loading && !pickerOpen) onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [loading, onClose])
+  }, [loading, onClose, pickerOpen])
+
+  // En la agenda, name es la razon social o la persona y venue_name el local.
+  // Para recoger manda el local: es lo que el repartidor busca en la calle.
+  const handlePickerSelect = (entry: AddressBookEntry) => {
+    const filled = {
+      address: entry.address,
+      postal_code: entry.cp,
+      city: entry.city,
+      phone: entry.phone ?? '',
+    }
+    if (pickerOpen === 'pickup') {
+      setOrigin({
+        ...filled,
+        name: entry.venue_name || entry.name,
+        contact_name: entry.contact_person ?? (entry.venue_name ? entry.name : ''),
+      })
+    } else if (pickerOpen === 'sat') {
+      setDest({ ...filled, name: entry.name, contact_name: entry.contact_person ?? '' })
+    }
+  }
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -116,8 +143,15 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
             </select>
           </div>
 
-          <fieldset className="space-y-3">
-            <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Recoger en</legend>
+          {/* Sin <legend>: tiene que ser el primer hijo del fieldset y aqui
+              comparte fila con el boton de agenda. */}
+          <fieldset className="space-y-3" aria-labelledby="new-pickup-origin">
+            <div className="flex items-center justify-between">
+              <p id="new-pickup-origin" className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Recoger en</p>
+              <button type="button" onClick={() => setPickerOpen('pickup')} disabled={loading} className={AGENDA_BUTTON}>
+                Cargar de agenda
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <input className={`${INPUT} col-span-2`} placeholder="Local o cliente" value={origin.name} onChange={setO('name')} disabled={loading} required />
               <input className={INPUT} placeholder="Persona de contacto" value={origin.contact_name} onChange={setO('contact_name')} disabled={loading} />
@@ -142,6 +176,11 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
             </div>
             {destType === 'sat' && (
               <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 flex justify-end">
+                  <button type="button" onClick={() => setPickerOpen('sat')} disabled={loading} className={AGENDA_BUTTON}>
+                    Cargar SAT de agenda
+                  </button>
+                </div>
                 <input className={`${INPUT} col-span-2`} placeholder="Nombre del SAT" value={dest.name} onChange={setD('name')} disabled={loading} required />
                 <input className={INPUT} placeholder="Contacto" value={dest.contact_name} onChange={setD('contact_name')} disabled={loading} />
                 <input className={INPUT} placeholder="Teléfono" value={dest.phone} onChange={setD('phone')} disabled={loading} />
@@ -193,6 +232,13 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
           </div>
         </form>
       </div>
+
+      <AddressPicker
+        open={pickerOpen !== null}
+        onClose={() => setPickerOpen(null)}
+        onSelect={handlePickerSelect}
+        variant={pickerOpen ?? 'pickup'}
+      />
     </div>
   )
 }

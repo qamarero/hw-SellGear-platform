@@ -7,6 +7,7 @@
  * se avisa a HSM.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { upsertAddressFromOrder } from '@/lib/address-book/upsert'
 import {
   cancelPickup as tipsaCancelPickup,
   createPickup as tipsaCreatePickup,
@@ -95,7 +96,43 @@ export async function insertPickupRequest(
 
   const pickup = created as Pickup
   await recordAppEvent(admin, pickup.id, 'solicitada', describeRequest(pickup), createdBy)
+  await saveToAddressBook(admin, pickup, createdBy)
   return { pickup, created: true }
+}
+
+/**
+ * El cliente (y el SAT, si lo hay) pasan a la agenda, como hacen los envios
+ * libres: la siguiente recogida o envio a ese local se carga con un clic.
+ * upsertAddressFromOrder no lanza y descarta los duplicados.
+ */
+async function saveToAddressBook(admin: Admin, p: Pickup, createdBy: string | null): Promise<void> {
+  const writes = [
+    upsertAddressFromOrder(admin, {
+      name: p.origin_name,
+      address: p.origin_address,
+      cp: p.origin_cp,
+      city: p.origin_city,
+      province: p.origin_province,
+      phone: p.origin_phone,
+      email: p.origin_email,
+      contact_person: p.origin_contact,
+      created_by: createdBy,
+    }),
+  ]
+  if (p.destination_type === 'sat' && p.destination_name && p.destination_address && p.destination_cp && p.destination_city) {
+    writes.push(
+      upsertAddressFromOrder(admin, {
+        name: p.destination_name,
+        address: p.destination_address,
+        cp: p.destination_cp,
+        city: p.destination_city,
+        phone: p.destination_phone,
+        contact_person: p.destination_contact,
+        created_by: createdBy,
+      }),
+    )
+  }
+  await Promise.all(writes)
 }
 
 function describeRequest(p: Pickup): string {

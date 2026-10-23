@@ -10,12 +10,14 @@ export interface AddressPickerProps {
   open: boolean
   onClose: () => void
   onSelect: (entry: AddressBookEntry) => void
-  variant?: 'sender' | 'recipient'
+  variant?: 'sender' | 'recipient' | 'pickup' | 'sat'
 }
 
 const PLACEHOLDER: Record<NonNullable<AddressPickerProps['variant']>, string> = {
   sender: 'Buscar remitente en agenda...',
   recipient: 'Buscar destinatario en agenda...',
+  pickup: 'Buscar cliente en agenda...',
+  sat: 'Buscar SAT en agenda...',
 }
 
 const MAX_RESULTS = 10
