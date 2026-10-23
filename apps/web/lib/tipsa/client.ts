@@ -300,7 +300,8 @@ export async function cancelPickup(config: TipsaConfig, code: string): Promise<v
     const { errorCode } = parseBorraRecogidaResponse(xml)
     if (errorCode) {
       const err = new Error(
-        BORRA_RECOGIDA_ERRORS[errorCode] ?? `TIPSA no ha anulado la recogida (codigo ${errorCode})`,
+        BORRA_RECOGIDA_ERRORS[errorCode] ??
+          `TIPSA no ha anulado la recogida (código ${errorCode}). Si la agencia de origen ya la ha leído, hay que llamar a esa agencia.`,
       ) as Error & { rawResponse: string }
       err.rawResponse = xml
       throw err

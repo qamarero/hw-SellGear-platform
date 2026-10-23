@@ -56,7 +56,7 @@ export default function PickupActions({ pickup, services, defaultServiceCode, de
 
   async function handleCancel() {
     const warning = pickup.tipsa_code
-      ? `Se anulará también en TIPSA (${pickup.tipsa_code}).`
+      ? `Se anulará también en TIPSA (${pickup.tipsa_code}). Si la agencia de origen ya la ha leído, TIPSA no lo permitirá y habrá que llamar a la agencia.`
       : 'Aún no está en TIPSA.'
     if (!window.confirm(`¿Anular la recogida ${pickup.pickup_id}? ${warning}`)) return
     const reason = window.prompt('Motivo (opcional, lo verá HSM):') ?? ''

@@ -75,6 +75,20 @@ describe('buildGrabaRecogidaEnvelope', () => {
     expect(xml).toContain('<tem:ID>{SESSION}</tem:ID>')
   })
 
+  it('va con la version 14, la que TIPSA tiene activa', () => {
+    expect(GRABA_RECOGIDA_METHOD).toBe('GrabaRecogida14')
+  })
+
+  it('manda el contacto del destino en strPersContactoDes (v14)', () => {
+    const withContact = buildGrabaRecogidaEnvelope({
+      creds: { agencyCode: '041033', clientCode: '010' },
+      sessionId: '{SESSION}',
+      input: { ...INPUT, destination: { ...INPUT.destination, contactPerson: 'Recepción SAT' } },
+    })
+    expect(withContact).toContain('<tem:strPersContactoDes>Recepción SAT</tem:strPersContactoDes>')
+    expect(xml).toContain('<tem:strPersContactoDes></tem:strPersContactoDes>')
+  })
+
   it('la paga nuestra agencia y deja que TIPSA canalice origen y destino', () => {
     expect(xml).toContain('<tem:strCodAgeCargo>041033</tem:strCodAgeCargo>')
     expect(xml).toContain('<tem:strCodAgeSol>041033</tem:strCodAgeSol>')

@@ -6,7 +6,7 @@ import PickupStatusBadge from './PickupStatusBadge'
 import SchedulePickupModal from './SchedulePickupModal'
 import NewPickupModal from './NewPickupModal'
 import { formatPickupWindow, pickupBadgeLabel, pickupDestinationLabel } from '@/lib/pickups/format'
-import { PICKUP_REASON_LABELS } from '@/lib/pickups/status'
+import { PICKUP_REASON_LABELS, shortTime } from '@/lib/pickups/status'
 import type { Pickup } from '@/types/database'
 
 interface PickupsBoardProps {
@@ -77,6 +77,11 @@ export default function PickupsBoard({
                     {p.origin_city} {p.origin_cp} → {pickupDestinationLabel(p)}
                     {p.items.length > 0 && ` · ${p.items.map((it) => it.description).join(', ')}`}
                   </p>
+                  {p.time_from && p.time_to && (
+                    <p className="text-xs text-gray-500">
+                      Horario del cliente: {shortTime(p.time_from)}–{shortTime(p.time_to)}
+                    </p>
+                  )}
                 </div>
                 {canManage && (
                   <div className="flex flex-shrink-0 gap-2">

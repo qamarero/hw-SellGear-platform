@@ -73,6 +73,10 @@ export async function insertPickupRequest(
     instructions: data.instructions,
     packages: data.packages,
     weight_kg: data.weight_kg,
+    // Mientras esta solicitada, la franja es la que pidio el cliente; al
+    // programar se sobrescribe con la que se manda a TIPSA.
+    time_from: data.time_from,
+    time_to: data.time_to,
     created_by: createdBy,
     // Nace sabida por HSM: es HSM quien la pide y recibe la respuesta.
     hsm_notified_status: source === 'hsm' ? 'solicitada' : null,
@@ -190,7 +194,6 @@ export async function schedulePickup(
     destination,
     reference: pickupReference(pickup),
     observations: schedule.observations ?? pickup.instructions ?? undefined,
-    destinationObservations: destination.contactPerson ? `Entregar a ${destination.contactPerson}` : undefined,
     content: buildPickupContent(pickup) || undefined,
   })
 

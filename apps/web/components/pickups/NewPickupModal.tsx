@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, X } from 'lucide-react'
 import AddressPicker from '@/components/address-book/AddressPicker'
+import { isUnusualPickupWindow } from '@/lib/pickups/format'
 import { PICKUP_REASON_LABELS } from '@/lib/pickups/status'
 import type { AddressBookEntry, PickupDestinationType, PickupReason } from '@/types/database'
 
@@ -31,6 +32,8 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
   const [origin, setOrigin] = useState({ name: '', contact_name: '', phone: '', address: '', postal_code: '', city: '' })
   const [destType, setDestType] = useState<PickupDestinationType>('oficina')
   const [dest, setDest] = useState({ name: '', contact_name: '', phone: '', address: '', postal_code: '', city: '' })
+  // Horario que le viene bien al cliente; llega relleno a «Programar».
+  const [clientWindow, setClientWindow] = useState({ from: '', to: '' })
   const [itemsText, setItemsText] = useState('')
   const [instructions, setInstructions] = useState('')
   const [loading, setLoading] = useState(false)
@@ -85,6 +88,8 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
               .filter(Boolean)
               .map((description) => ({ description })),
             instructions: instructions.trim() || undefined,
+            time_from: clientWindow.from || undefined,
+            time_to: clientWindow.to || undefined,
           }),
         })
         const data = await res.json()
@@ -100,7 +105,7 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
         setLoading(false)
       }
     },
-    [reason, origin, destType, dest, itemsText, instructions, router, onClose],
+    [reason, origin, destType, dest, clientWindow, itemsText, instructions, router, onClose],
   )
 
   const setO = (k: keyof typeof origin) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -159,6 +164,35 @@ export default function NewPickupModal({ onClose }: NewPickupModalProps) {
               <input className={`${INPUT} col-span-2`} placeholder="Dirección" value={origin.address} onChange={setO('address')} disabled={loading} required />
               <input className={INPUT} placeholder="Código postal" inputMode="numeric" maxLength={5} value={origin.postal_code} onChange={setO('postal_code')} disabled={loading} required />
               <input className={INPUT} placeholder="Población" value={origin.city} onChange={setO('city')} disabled={loading} required />
+              <div className="col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">
+                  Horario que le viene bien al cliente (opcional)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    aria-label="Desde"
+                    className={INPUT}
+                    value={clientWindow.from}
+                    onChange={(e) => setClientWindow((w) => ({ ...w, from: e.target.value }))}
+                    disabled={loading}
+                  />
+                  <span className="text-xs text-gray-500">a</span>
+                  <input
+                    type="time"
+                    aria-label="Hasta"
+                    className={INPUT}
+                    value={clientWindow.to}
+                    onChange={(e) => setClientWindow((w) => ({ ...w, to: e.target.value }))}
+                    disabled={loading}
+                  />
+                </div>
+                {isUnusualPickupWindow(clientWindow.from, clientWindow.to) && (
+                  <p className="mt-1 text-[11px] text-amber-800">
+                    Horario extraordinario: habrá que confirmarlo con la agencia de origen al programar.
+                  </p>
+                )}
+              </div>
             </div>
           </fieldset>
 

@@ -45,6 +45,9 @@ export interface PickupRequestData {
   instructions: string | null
   packages: number
   weight_kg: number
+  /** Franja que le viene bien al cliente (HH:MM). Logistica la usa al programar. */
+  time_from: string | null
+  time_to: string | null
 }
 
 export interface ScheduleData {
@@ -182,6 +185,15 @@ export function validatePickupRequest(
   const weight = positiveWeight(body.weight_kg, 1)
   if (weight === null) return fail('weight_kg', 'weight_kg debe ser un número mayor que 0.')
 
+  // Horario del cliente: opcional, pero si viene, las dos horas y con sentido.
+  const timeFrom = trimOrNull(body.time_from)
+  const timeTo = trimOrNull(body.time_to)
+  if (timeFrom || timeTo) {
+    if (!timeFrom || !TIME_REGEX.test(timeFrom)) return fail('time_from', 'Hora de inicio del cliente no válida (HH:MM).')
+    if (!timeTo || !TIME_REGEX.test(timeTo)) return fail('time_to', 'Hora de fin del cliente no válida (HH:MM).')
+    if (timeFrom >= timeTo) return fail('time_to', 'El horario del cliente tiene que terminar después de empezar.')
+  }
+
   const requestedBy = asObject(body.requested_by)
 
   return {
@@ -209,6 +221,8 @@ export function validatePickupRequest(
       instructions: trimOrNull(body.instructions),
       packages,
       weight_kg: weight,
+      time_from: timeFrom,
+      time_to: timeTo,
     },
   }
 }

@@ -169,7 +169,7 @@ export interface TipsaPickupParty {
   city: string
   cp: string
   phone: string
-  /** strPersContacto (origen) / strObsDes no tiene contacto de destino en la v12. */
+  /** strPersContacto en origen, strPersContactoDes en destino (GrabaRecogida14). */
   contactPerson?: string
 }
 

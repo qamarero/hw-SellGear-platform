@@ -54,3 +54,16 @@ export function nextWorkingDay(today: string): string {
   } while (d.getUTCDay() === 0 || d.getUTCDay() === 6)
   return d.toISOString().slice(0, 10)
 }
+
+/**
+ * Franja normal de recogida. Fuera de ella (antes de las 9:00 o despues de
+ * las 19:00) la app avisa de que es un horario extraordinario y hay que
+ * confirmarlo con la agencia de origen: TIPSA dice que la hora limite y la
+ * franja se acuerdan con esa agencia.
+ */
+export const USUAL_PICKUP_WINDOW = { from: '09:00', to: '19:00' } as const
+
+export function isUnusualPickupWindow(from: string | null | undefined, to: string | null | undefined): boolean {
+  if (!from || !to) return false
+  return from < USUAL_PICKUP_WINDOW.from || to > USUAL_PICKUP_WINDOW.to
+}

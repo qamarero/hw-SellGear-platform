@@ -521,11 +521,12 @@ export function parseEnvEstIncCambiosCdata(cdata: string): TipsaTrackingDelta[] 
 // de Sevilla). Ver docs/integrations/tipsa/extracted/Ejemplos/GrabaRecogida/.
 
 /**
- * Version del metodo. Nuestro WSDL llega a la 12; el PDF v74.0 documenta la
- * 14 (anade tipo de transito y contacto de destino). Si TIPSA nos pide otra,
- * se cambia aqui: el parser acepta cualquier GrabaRecogidaNResponse.
+ * Version del metodo. TIPSA confirmo el 2026-10-23 que la activa es la 14
+ * (documentada en el PDF v74.0, pagina 35; nuestro WSDL solo llega a la 12).
+ * Sobre la 12 anade strTransito, que no mandamos, y strPersContactoDes.
+ * El parser acepta cualquier GrabaRecogidaNResponse.
  */
-export const GRABA_RECOGIDA_METHOD = 'GrabaRecogida12'
+export const GRABA_RECOGIDA_METHOD = 'GrabaRecogida14'
 
 export interface GrabaRecogidaInput {
   creds: { agencyCode: string; clientCode: string }
@@ -578,6 +579,7 @@ export function buildGrabaRecogidaEnvelope({
       <tem:strRef>${xmlEscape(input.reference ?? '')}</tem:strRef>
       <tem:strObsDes>${xmlEscape(input.destinationObservations ?? '')}</tem:strObsDes>
       <tem:strContenido>${xmlEscape(input.content ?? '')}</tem:strContenido>
+      <tem:strPersContactoDes>${xmlEscape(des.contactPerson ?? '')}</tem:strPersContactoDes>
     </${tag}>
   </soapenv:Body>
 </soapenv:Envelope>`
@@ -710,10 +712,15 @@ export function parseConsRecIncidenciasResponse(xml: string): TipsaPickupInciden
  * descolocada al extraerla; lo que se lee es 1 = la recogida no existe,
  * 2 = sin permisos para borrarla, 3 = error desconocido. 0 o vacio = borrada.
  */
+// TIPSA (2026-10-23): se puede anular mientras la agencia de origen no la
+// haya leido; despues hay que pedirselo a esa agencia. Lo mas probable es que
+// ese caso llegue como "sin permisos", asi que el mensaje lo dice.
+const READ_BY_AGENCY = 'Si la agencia de origen ya la ha leído, TIPSA no deja anularla desde aquí: hay que llamar a esa agencia.'
+
 export const BORRA_RECOGIDA_ERRORS: Record<string, string> = {
   '1': 'La recogida no existe en TIPSA',
-  '2': 'No tenemos permisos para anular esta recogida en TIPSA',
-  '3': 'TIPSA no ha podido anular la recogida (error desconocido)',
+  '2': `TIPSA no deja anular esta recogida. ${READ_BY_AGENCY}`,
+  '3': `TIPSA no ha podido anular la recogida. ${READ_BY_AGENCY}`,
 }
 
 export function parseBorraRecogidaResponse(xml: string): { errorCode: string | null } {

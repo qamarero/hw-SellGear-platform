@@ -8,6 +8,7 @@ import { derivePickupStatus } from '@/lib/pickups/derive'
 import { buildPickupContent, toPickupDTO } from '@/lib/pickups/dto'
 import { pickupReference } from '@/lib/pickups/service'
 import { shortTime } from '@/lib/pickups/status'
+import { isUnusualPickupWindow } from '@/lib/pickups/format'
 import { todayInMadrid, validatePickupRequest, validateScheduleBody } from '@/lib/pickups/validate'
 import type { Pickup } from '@/types/database'
 
@@ -70,6 +71,19 @@ describe('validatePickupRequest', () => {
   it('un envio directo al cliente no es una recogida', () => {
     const r = validatePickupRequest({ ...HSM_BODY, destination: { type: 'cliente' } }, { requireRma: true })
     expect(r).toMatchObject({ ok: false, field: 'destination.type' })
+  })
+
+  it('el horario del cliente es opcional, pero completo y con sentido', () => {
+    expect(validatePickupRequest(HSM_BODY, { requireRma: true })).toMatchObject({ ok: true, data: { time_from: null, time_to: null } })
+    expect(validatePickupRequest({ ...HSM_BODY, time_from: '10:00', time_to: '13:00' }, { requireRma: true })).toMatchObject({
+      ok: true,
+      data: { time_from: '10:00', time_to: '13:00' },
+    })
+    expect(validatePickupRequest({ ...HSM_BODY, time_from: '10:00' }, { requireRma: true })).toMatchObject({ ok: false, field: 'time_to' })
+    expect(validatePickupRequest({ ...HSM_BODY, time_from: '13:00', time_to: '10:00' }, { requireRma: true })).toMatchObject({
+      ok: false,
+      field: 'time_to',
+    })
   })
 
   it('al SAT hace falta su direccion', () => {
@@ -250,5 +264,14 @@ describe('helpers', () => {
   it('shortTime recorta segundos', () => {
     expect(shortTime('09:00:00')).toBe('09:00')
     expect(shortTime(null)).toBeNull()
+  })
+})
+
+describe('isUnusualPickupWindow', () => {
+  it('avisa fuera de 9:00-19:00', () => {
+    expect(isUnusualPickupWindow('09:00', '14:00')).toBe(false)
+    expect(isUnusualPickupWindow('08:00', '12:00')).toBe(true)
+    expect(isUnusualPickupWindow('16:00', '20:00')).toBe(true)
+    expect(isUnusualPickupWindow(null, '20:00')).toBe(false)
   })
 })

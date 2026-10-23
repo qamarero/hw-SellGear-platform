@@ -5,7 +5,7 @@ import type { Pickup, PickupEvent, UserRole } from '@/types/database'
 import { canManagePickups, canReadFreeShipments } from '@/lib/auth'
 import { loadServicesCatalog } from '@/lib/tipsa/services'
 import { formatPickupWindow, nextWorkingDay, pickupBadgeLabel } from '@/lib/pickups/format'
-import { PICKUP_REASON_LABELS } from '@/lib/pickups/status'
+import { PICKUP_REASON_LABELS, shortTime } from '@/lib/pickups/status'
 import { todayInMadrid } from '@/lib/pickups/validate'
 import PickupStatusBadge from '@/components/pickups/PickupStatusBadge'
 import PickupActions from '@/components/pickups/PickupActions'
@@ -115,7 +115,13 @@ export default async function PickupDetailPage({ params }: PageProps) {
         <ReadOnlyCard
           title="TIPSA"
           rows={[
-            ['Cuándo', formatPickupWindow(pickup) ?? 'Sin programar'],
+            [
+              'Cuándo',
+              formatPickupWindow(pickup) ??
+                (pickup.time_from && pickup.time_to
+                  ? `Sin programar · el cliente prefiere ${shortTime(pickup.time_from)}–${shortTime(pickup.time_to)}`
+                  : 'Sin programar'),
+            ],
             ['Código', pickup.tipsa_code ?? '—'],
             ['Servicio', pickup.service_code ?? '—'],
             ['Envío generado', pickup.albaran ?? '—'],

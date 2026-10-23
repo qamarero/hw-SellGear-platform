@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, X } from 'lucide-react'
-import { pickupDestinationLabel } from '@/lib/pickups/format'
+import { USUAL_PICKUP_WINDOW, isUnusualPickupWindow, pickupDestinationLabel } from '@/lib/pickups/format'
+import { shortTime } from '@/lib/pickups/status'
 import type { Pickup } from '@/types/database'
 
 interface ServiceOption {
@@ -39,8 +40,11 @@ export default function SchedulePickupModal({
 }: SchedulePickupModalProps) {
   const router = useRouter()
   const [date, setDate] = useState(defaultDate)
-  const [timeFrom, setTimeFrom] = useState('09:00')
-  const [timeTo, setTimeTo] = useState('14:00')
+  // Parte de la franja que pidio el cliente (HSM o alta manual), si la hay.
+  const clientFrom = shortTime(pickup.time_from)
+  const clientTo = shortTime(pickup.time_to)
+  const [timeFrom, setTimeFrom] = useState(clientFrom ?? '09:00')
+  const [timeTo, setTimeTo] = useState(clientTo ?? '14:00')
   const [packages, setPackages] = useState(pickup.packages)
   const [weightKg, setWeightKg] = useState(Number(pickup.weight_kg))
   const [serviceCode, setServiceCode] = useState(
@@ -139,6 +143,11 @@ export default function SchedulePickupModal({
                   {items.map((it) => it.description).join(', ')}
                 </p>
               )}
+              {clientFrom && clientTo && (
+                <p>
+                  <span className="text-gray-500">Horario del cliente:</span> {clientFrom}–{clientTo}
+                </p>
+              )}
             </div>
           </div>
 
@@ -156,6 +165,13 @@ export default function SchedulePickupModal({
               <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} className={INPUT} disabled={loading} required />
             </div>
           </div>
+
+          {isUnusualPickupWindow(timeFrom, timeTo) && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Horario extraordinario (fuera de {USUAL_PICKUP_WINDOW.from}–{USUAL_PICKUP_WINDOW.to}): confírmalo con la
+              agencia de origen de TIPSA antes de programar.
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -193,6 +209,10 @@ export default function SchedulePickupModal({
               </select>
             </div>
           </div>
+
+          <p className="-mt-2 text-[11px] text-gray-500">
+            El servicio decide el plazo del envío que TIPSA genera al recoger: con «14 Horas» llega en 14 h.
+          </p>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-700">Instrucciones para el repartidor (opcional)</label>

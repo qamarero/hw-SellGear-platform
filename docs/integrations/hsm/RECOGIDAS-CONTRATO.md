@@ -1,8 +1,8 @@
 # Recogidas HSM → MainOps — Contrato
 
 **Versión:** 1.0 · 2026-10-23
-**Estado:** preparado, pendiente de que TIPSA confirme que nuestra cuenta puede
-grabar recogidas por WebService. Nada de esto está desplegado.
+**Estado:** en producción en las dos apps desde el 2026-10-23. TIPSA ha
+confirmado las condiciones (sección «Lo que ha confirmado TIPSA», al final).
 
 ## Qué resuelve
 
@@ -101,7 +101,9 @@ Crea la solicitud de recogida de un RMA.
   "items": [{ "description": "10POS 10D-21 J6412", "serial": "10D21-2405-01187" }],
   "instructions": "Preguntar por el encargado",
   "packages": 1,
-  "weight_kg": 3
+  "weight_kg": 3,
+  "time_from": "10:00",
+  "time_to": "13:00"
 }
 ```
 
@@ -116,6 +118,7 @@ Crea la solicitud de recogida de un RMA.
 | `items` | no | Lo que se recoge. Va al campo «contenido» de TIPSA |
 | `instructions` | no | Observaciones para el repartidor |
 | `packages`, `weight_kg` | no | Por defecto 1 bulto y 1 kg; logística lo ajusta al programar |
+| `time_from`, `time_to` | no | Horario que le viene bien al cliente, «HH:MM». Las dos o ninguna, con `time_from` < `time_to`. MainOps lo precarga al programar |
 | `requested_by` | no | Quién lo pidió, para el historial |
 
 `destination.type = "cliente"` (envío directo al cliente) no es una recogida:
@@ -186,10 +189,27 @@ HSM.
 }
 ```
 
-- `pickup_date`, `time_from`, `time_to`, `tipsa_code`: `null` hasta que se
-  programa.
+- `pickup_date` y `tipsa_code`: `null` hasta que se programa.
+- `time_from`, `time_to`: mientras está `solicitada`, el horario que pidió el
+  cliente (o `null`); una vez programada, la franja que se pidió a TIPSA.
 - `albaran`: el envío que TIPSA genera al recoger. Es el valor que HSM puede
   copiar en «Seguimiento (envío)» del RMA.
 - `incidence`: `{ "code": "AS", "label": "Ausente", "observations": "…" }`
   cuando `status = "incidencia"`; si no, `null`.
 - Fechas de evento en ISO UTC. `pickup_date` es fecha local (Madrid).
+
+---
+
+## Lo que ha confirmado TIPSA (2026-10-23)
+
+Respuesta de la comercial a las preguntas que se le hicieron antes de
+programar recogidas por WebService:
+
+| Pregunta | Respuesta de TIPSA | Cómo queda en MainOps |
+|---|---|---|
+| ¿Podemos grabar recogidas por WS con nuestro código de cliente, a cargo de nuestra agencia? | Sí, si el cliente pertenece a la agencia de cargo. | Se manda `strCodAgeCargo` y `strCodAgeSol` = 041033 y `strCodCli` = 010, que es nuestro cliente dentro de esa agencia. |
+| ¿Qué servicio y tarifa? | El mismo que en los envíos. El servicio decide el plazo del envío que se genera al recoger: con 14 Horas, llega en 14 h. | `TIPSA_PICKUP_SERVICE_CODE` = 48 por defecto; el formulario deja elegir otro y lo explica. |
+| ¿Quién lleva la etiqueta? | La agencia de origen genera el envío a partir de la recogida y lleva la etiqueta. | Nada que imprimir: el cliente solo entrega el equipo. El albarán llega por `ConsRecogida` (`V_COD_ENV`). |
+| ¿Hora límite y franja mínima? | Se acuerda con la agencia de origen. | Se apunta el horario que le viene bien al cliente al pedirla (HSM o alta manual) y llega relleno a «Programar». Fuera de 9:00–19:00 la app avisa de que es extraordinario y hay que confirmarlo con la agencia. |
+| ¿Hasta cuándo se puede anular? | Mientras la agencia de origen no la haya leído. Después, hay que pedírselo a esa agencia. | «Anular» lo intenta con `BorraRecogida`; si TIPSA no deja, el error dice que hay que llamar a la agencia. |
+| ¿Qué versión de GrabaRecogida? | La 14. | `GRABA_RECOGIDA_METHOD = 'GrabaRecogida14'`; manda también `strPersContactoDes`. |
