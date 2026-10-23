@@ -13,8 +13,9 @@ export type HsmNotifyResult =
   | { ok: false; reason: string }
 
 export async function notifyHsm(dto: PickupDTO): Promise<HsmNotifyResult> {
-  const base = process.env.HSM_BASE_URL
-  const key = process.env.HSM_WEBHOOK_KEY
+  // trim(): un salto de línea pegado en Vercel haría la cabecera inválida.
+  const base = process.env.HSM_BASE_URL?.trim()
+  const key = process.env.HSM_WEBHOOK_KEY?.trim()
   if (!base || !key) {
     return { ok: false, reason: 'HSM_BASE_URL o HSM_WEBHOOK_KEY sin configurar' }
   }

@@ -24,10 +24,14 @@ export function validateApiKey(
   // idéntico al anterior.
   // Los endpoints que ESCRIBEN (recogidas de HSM) pasan allowQarvis: false:
   // Qarvis es de solo lectura y su clave no debe poder crear nada.
+  // trim(): una clave pegada en Vercel con un salto de línea al final no debe
+  // dejar de coincidir. Las claves son hex/base64, nunca llevan espacios.
   const candidates = [
     process.env[envVarName],
     allowQarvis ? process.env.QARVIS_API_KEY : undefined,
-  ].filter((k): k is string => typeof k === 'string' && k.length > 0)
+  ]
+    .map((k) => k?.trim())
+    .filter((k): k is string => typeof k === 'string' && k.length > 0)
 
   // Config inválida — la app no está lista para servir este endpoint.
   if (candidates.length === 0) {
@@ -41,7 +45,7 @@ export function validateApiKey(
     }
   }
 
-  const provided = request.headers.get('x-api-key') ?? ''
+  const provided = (request.headers.get('x-api-key') ?? '').trim()
   if (!provided) {
     return {
       ok: false,

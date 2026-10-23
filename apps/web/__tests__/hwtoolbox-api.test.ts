@@ -82,6 +82,17 @@ describe('validateApiKey for HWTOOLBOX_API_KEY', () => {
     if (!result.ok) expect(result.response.status).toBe(403)
   })
 
+  it('ignores a trailing newline pasted into the env var', async () => {
+    // Visto en Vercel al pegar una clave generada en la terminal: el valor
+    // guardado acababa en salto de linea y ninguna peticion coincidia.
+    process.env.HWTOOLBOX_API_KEY = 'hw_secret_123\n'
+    const result = validateApiKey(
+      makeRequest({ 'x-api-key': 'hw_secret_123' }),
+      'HWTOOLBOX_API_KEY',
+    )
+    expect(result.ok).toBe(true)
+  })
+
   it('accepts when HWTOOLBOX_API_KEY matches', async () => {
     const result = validateApiKey(
       makeRequest({ 'x-api-key': 'hw_secret_123' }),
