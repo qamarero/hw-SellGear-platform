@@ -76,6 +76,11 @@ export function canCreateFreeShipment(role: UserRole | null | undefined): boolea
   return !!role && (['hardware', 'admin'] as UserRole[]).includes(role)
 }
 
+/** Programar, anular y dar de alta recogidas TIPSA: los mismos que crean envios. */
+export function canManagePickups(role: UserRole | null | undefined): boolean {
+  return canCreateFreeShipment(role)
+}
+
 export function canDeleteFreeShipment(role: UserRole | null | undefined): boolean {
   return role === 'admin'
 }

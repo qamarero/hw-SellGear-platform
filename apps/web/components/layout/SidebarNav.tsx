@@ -12,6 +12,8 @@ interface SidebarNavProps {
   userRole?: UserRole | null
   badgeCounts?: Record<string, number>
   totalNew?: number
+  /** Recogidas solicitadas sin programar (badge rojo en Logistica > Recogidas). */
+  pendingPickups?: number
 }
 
 const NAV_ITEMS = [
@@ -121,7 +123,7 @@ function Badge({ count }: { count: number }) {
   )
 }
 
-export default function SidebarNav({ userEmail, userRole, badgeCounts = {}, totalNew = 0 }: SidebarNavProps) {
+export default function SidebarNav({ userEmail, userRole, badgeCounts = {}, totalNew = 0, pendingPickups = 0 }: SidebarNavProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -315,6 +317,18 @@ export default function SidebarNav({ userEmail, userRole, badgeCounts = {}, tota
               d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 011 1h2m-9 0h6m4 0h2a1 1 0 001-1v-5a1 1 0 00-.293-.707L17 9V6a1 1 0 00-1-1h-3" />
           </svg>
           Envios
+        </Link>
+        <Link
+          href="/recogidas"
+          className={linkClass(pathname.startsWith('/recogidas'))}
+        >
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* flecha de vuelta: el material viene hacia nosotros */}
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+          </svg>
+          Recogidas
+          <Badge count={pendingPickups} />
         </Link>
         <Link
           href="/address-book"

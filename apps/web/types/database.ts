@@ -301,6 +301,95 @@ export interface Shipment {
   creator?: UserProfile
 }
 
+// Recogidas TIPSA (migracion 20261023000001_pickups). Ver
+// docs/integrations/hsm/RECOGIDAS-CONTRATO.md.
+export type PickupStatus =
+  | 'solicitada'
+  | 'programada'
+  | 'incidencia'
+  | 'en_curso'
+  | 'recibida'
+  | 'anulada'
+
+export type PickupSource = 'hsm' | 'manual'
+export type PickupReason = 'rma' | 'devolucion' | 'baja' | 'cambio' | 'otro'
+export type PickupDestinationType = 'oficina' | 'sat'
+
+export interface PickupItem {
+  description: string
+  serial?: string | null
+}
+
+export interface Pickup {
+  id: string
+  pickup_id: string
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  source: PickupSource
+  source_id: string | null
+  source_ref: string | null
+  requested_by_name: string | null
+  requested_by_email: string | null
+  reason: PickupReason
+  status: PickupStatus
+  origin_name: string
+  origin_contact: string | null
+  origin_phone: string
+  origin_email: string | null
+  origin_address: string
+  origin_cp: string
+  origin_city: string
+  origin_province: string | null
+  destination_type: PickupDestinationType
+  destination_name: string | null
+  destination_contact: string | null
+  destination_phone: string | null
+  destination_address: string | null
+  destination_cp: string | null
+  destination_city: string | null
+  items: PickupItem[]
+  instructions: string | null
+  packages: number
+  weight_kg: number
+  /** YYYY-MM-DD */
+  pickup_date: string | null
+  /** HH:MM:SS (columna TIME) */
+  time_from: string | null
+  time_to: string | null
+  service_code: string | null
+  tipsa_code: string | null
+  tipsa_guid: string | null
+  tipsa_origin_agency: string | null
+  tipsa_reserved_albaran: string | null
+  albaran: string | null
+  tracking_last_status: string | null
+  tracking_last_checked_at: string | null
+  incidence_code: string | null
+  incidence_label: string | null
+  incidence_obs: string | null
+  scheduled_at: string | null
+  picked_up_at: string | null
+  received_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  hsm_notified_status: string | null
+  hsm_notified_at: string | null
+  notes: string | null
+}
+
+export interface PickupEvent {
+  id: number
+  pickup_id: string
+  kind: 'recogida' | 'envio' | 'app'
+  event_code: string
+  event_label: string | null
+  event_date: string
+  created_by: string | null
+  raw_payload: Record<string, unknown> | null
+  created_at: string
+}
+
 export interface ShipmentSenderInput {
   name: string
   address: string

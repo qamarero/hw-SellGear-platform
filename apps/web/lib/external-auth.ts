@@ -12,6 +12,7 @@ import { timingSafeEqual } from 'crypto'
 export function validateApiKey(
   request: NextRequest,
   envVarName: string = 'MAIN_PORTAL_API_KEY',
+  { allowQarvis = true }: { allowQarvis?: boolean } = {},
 ):
   | { ok: true }
   | { ok: false; response: NextResponse } {
@@ -21,9 +22,11 @@ export function validateApiKey(
   // (Portal, HWToolbox): solo AMPLÍA el conjunto aceptado, de forma
   // retro-compatible. Si QARVIS_API_KEY no está definida, el comportamiento es
   // idéntico al anterior.
+  // Los endpoints que ESCRIBEN (recogidas de HSM) pasan allowQarvis: false:
+  // Qarvis es de solo lectura y su clave no debe poder crear nada.
   const candidates = [
     process.env[envVarName],
-    process.env.QARVIS_API_KEY,
+    allowQarvis ? process.env.QARVIS_API_KEY : undefined,
   ].filter((k): k is string => typeof k === 'string' && k.length > 0)
 
   // Config inválida — la app no está lista para servir este endpoint.

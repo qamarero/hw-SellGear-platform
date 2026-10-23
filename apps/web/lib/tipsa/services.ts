@@ -113,6 +113,36 @@ export function isIncidenceEvent(code: TipsaEventCode): boolean {
 }
 
 /**
+ * Tipos de incidencia de RECOGIDAS (V_COD_TIPO_INC de ConsRecIncidencias).
+ *
+ * Fuente: "Tabla de tipos de incidencia" (misma pagina 22 del PDF resumen
+ * v64.0), filas "Recogidas" o "Ambos". Las de solo envios no entran: una
+ * recogida no puede tener "mercancia en aduana". Un codigo que no este aqui
+ * se muestra tal cual, sin inventarle significado.
+ */
+export const TIPSA_PICKUP_INCIDENCE_LABELS: Record<string, string> = {
+  AS: 'Ausente',
+  C: 'Cerrado',
+  DI: 'Dirección incorrecta',
+  DO: 'Devolver a origen',
+  EDT: 'Envío deteriorado',
+  EI: 'Embalaje insuficiente',
+  EXM: 'Extravío de mercancía',
+  FD: 'Faltan datos',
+  FL: 'Festivo local',
+  MC: 'Mal canalizado',
+  NTM: 'No tienen mercancía',
+  NTV: 'No tienen valija',
+  RC: 'Recogida concertada',
+  RT: 'Ruta tarde',
+  VMS: 'Vehículo mal solicitado',
+}
+
+export function tipsaPickupIncidenceLabel(code: string): string {
+  return TIPSA_PICKUP_INCIDENCE_LABELS[code] ?? `Incidencia ${code}`
+}
+
+/**
  * Calcula el "estado oficial" del envio entre una lista cronologica de eventos.
  *
  * Regla: si en algun momento llego un evento terminal (3 Entregado /

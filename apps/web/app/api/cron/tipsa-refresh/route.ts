@@ -6,6 +6,7 @@ import {
   loadTipsaConfig,
   resolveOfficialStatus,
 } from '@/lib/tipsa/services'
+import { refreshTrackedPickups } from '@/lib/pickups/service'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
         updated_orders: 0,
         updated_shipments: 0,
         deltas_received: 0,
+        recogidas: await runPickupsPass(admin, config),
         duration_ms: Date.now() - started,
       })
     }
@@ -263,6 +265,7 @@ export async function POST(request: NextRequest) {
       albaranes_desconocidos: notFound,
       albaranes_fallidos: failed,
       cursor_avanzado: failed === 0,
+      recogidas: await runPickupsPass(admin, config),
       duration_ms: Date.now() - started,
     })
   } catch (err) {
@@ -284,6 +287,25 @@ export async function GET(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 type AdminClient = ReturnType<typeof createAdminClient>
+
+/**
+ * Recogidas: van en el mismo tick para no montar otro pg_cron ni otro secret.
+ * Son pocas al dia, asi que se consultan una a una (ConsRecEstados +
+ * ConsRecogida) sin feed de deltas. Un fallo aqui no toca el cursor ni la
+ * respuesta de los envios: se informa y ya.
+ */
+async function runPickupsPass(admin: AdminClient, config: ReturnType<typeof loadTipsaConfig>) {
+  try {
+    const r = await refreshTrackedPickups(admin, config)
+    if (r.failed.length > 0) {
+      console.warn('[cron/tipsa-refresh] recogidas fallidas:', JSON.stringify(r.failed))
+    }
+    return { refrescadas: r.refreshed, fallidas: r.failed.length, avisos_hsm: r.hsmRetried }
+  } catch (err) {
+    console.error('[cron/tipsa-refresh] recogidas:', (err as Error).message)
+    return { error: (err as Error).message }
+  }
+}
 
 /** Busca el albaran primero en orders y, si no aparece, en shipments. */
 async function findParent(

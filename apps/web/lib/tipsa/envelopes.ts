@@ -1,12 +1,16 @@
 import { XMLParser } from 'fast-xml-parser'
-import { tipsaEventLabel } from './services'
+import { tipsaEventLabel, tipsaPickupIncidenceLabel } from './services'
 import type {
+  TipsaCreatePickupInput,
+  TipsaCreatePickupResult,
   TipsaCreateShipmentInput,
   TipsaCreateShipmentResult,
   TipsaCredentials,
   TipsaLabelFormat,
   TipsaLabelResult,
   TipsaLoginResult,
+  TipsaPickupIncidence,
+  TipsaPickupInfo,
   TipsaSender,
   TipsaShippingEvent,
   TipsaTrackingDelta,
@@ -286,11 +290,19 @@ export function parseConsEnvEstadosResponse(xml: string, albaran: string): Tipsa
  * Exportado para poder testearlo directo con fixtures.
  */
 export function parseEnvEstadosCdata(cdata: string): TipsaShippingEvent[] {
+  return parseEstadosCdata(cdata, 'ENV_ESTADOS')
+}
+
+/**
+ * Comun a envios (ENV_ESTADOS) y recogidas (REC_ESTADOS): mismos atributos
+ * V_COD_TIPO_EST y D_FEC_HORA_ALTA, mismo catalogo de codigos.
+ */
+function parseEstadosCdata(cdata: string, nodeName: string): TipsaShippingEvent[] {
   if (!cdata.trim()) return []
   const parsed = SHARED_PARSER.parse(cdata)
   const consulta = (parsed as Record<string, unknown>).CONSULTA
   if (!consulta || typeof consulta !== 'object') return []
-  const nodes = (consulta as Record<string, unknown>).ENV_ESTADOS
+  const nodes = (consulta as Record<string, unknown>)[nodeName]
   const arr = Array.isArray(nodes) ? nodes : nodes ? [nodes] : []
   return arr
     .map((raw) => {
@@ -500,8 +512,253 @@ export function parseEnvEstIncCambiosCdata(cdata: string): TipsaTrackingDelta[] 
 }
 
 // =========================================================
+// RECOGIDAS
+// =========================================================
+// Una recogida es TIPSA yendo a buscar material a un tercero (el cliente)
+// para llevarlo a donde digamos. La paga nuestra agencia (strCodAgeCargo).
+// No mandamos strCodAgeOri/strCodAgeDes: TIPSA las canaliza por CP, que es
+// justo lo que queremos (la agencia de origen es la del cliente, no la nuestra
+// de Sevilla). Ver docs/integrations/tipsa/extracted/Ejemplos/GrabaRecogida/.
+
+/**
+ * Version del metodo. Nuestro WSDL llega a la 12; el PDF v74.0 documenta la
+ * 14 (anade tipo de transito y contacto de destino). Si TIPSA nos pide otra,
+ * se cambia aqui: el parser acepta cualquier GrabaRecogidaNResponse.
+ */
+export const GRABA_RECOGIDA_METHOD = 'GrabaRecogida12'
+
+export interface GrabaRecogidaInput {
+  creds: { agencyCode: string; clientCode: string }
+  sessionId: string
+  input: TipsaCreatePickupInput
+}
+
+export function buildGrabaRecogidaEnvelope({
+  creds,
+  sessionId,
+  input,
+}: GrabaRecogidaInput): string {
+  // Peticion: YYYY/MM/DD y YYYY/MM/DD HH:MM:SS en hora de Madrid, igual que
+  // ConsEnvEstIncCambiosEstados. La fecha y la franja ya vienen en local.
+  const day = input.date.replace(/-/g, '/')
+  const ori = input.origin
+  const des = input.destination
+  const tag = `tem:WebServService___${GRABA_RECOGIDA_METHOD}`
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+  <soapenv:Header>
+    <tem:ROClientIDHeader>
+      <tem:ID>${xmlEscape(sessionId)}</tem:ID>
+    </tem:ROClientIDHeader>
+  </soapenv:Header>
+  <soapenv:Body>
+    <${tag}>
+      <tem:strCodAgeSol>${xmlEscape(creds.agencyCode)}</tem:strCodAgeSol>
+      <tem:strCodAgeCargo>${xmlEscape(creds.agencyCode)}</tem:strCodAgeCargo>
+      <tem:dtFecRec>${xmlEscape(day)}</tem:dtFecRec>
+      <tem:dtHoraRecIni>${xmlEscape(`${day} ${input.timeFrom}:00`)}</tem:dtHoraRecIni>
+      <tem:dtHoraRecFin>${xmlEscape(`${day} ${input.timeTo}:00`)}</tem:dtHoraRecFin>
+      <tem:intBul>${xmlEscape(input.packages)}</tem:intBul>
+      <tem:dPeso>${xmlEscape(input.weightKg)}</tem:dPeso>
+      <tem:strNomOri>${xmlEscape(ori.name)}</tem:strNomOri>
+      <tem:strDirOri>${xmlEscape(ori.address)}</tem:strDirOri>
+      <tem:strPobOri>${xmlEscape(ori.city)}</tem:strPobOri>
+      <tem:strCPOri>${xmlEscape(ori.cp)}</tem:strCPOri>
+      <tem:strTlfOri>${xmlEscape(ori.phone)}</tem:strTlfOri>
+      <tem:strNomDes>${xmlEscape(des.name)}</tem:strNomDes>
+      <tem:strDirDes>${xmlEscape(des.address)}</tem:strDirDes>
+      <tem:strPobDes>${xmlEscape(des.city)}</tem:strPobDes>
+      <tem:strCPDes>${xmlEscape(des.cp)}</tem:strCPDes>
+      <tem:strTlfDes>${xmlEscape(des.phone)}</tem:strTlfDes>
+      <tem:strObs>${xmlEscape(input.observations ?? '')}</tem:strObs>
+      <tem:strCodCli>${xmlEscape(creds.clientCode)}</tem:strCodCli>
+      <tem:strPersContacto>${xmlEscape(ori.contactPerson ?? ori.name)}</tem:strPersContacto>
+      <tem:strCodTipoServ>${xmlEscape(input.serviceCode)}</tem:strCodTipoServ>
+      <tem:boSabado>false</tem:boSabado>
+      <tem:strRef>${xmlEscape(input.reference ?? '')}</tem:strRef>
+      <tem:strObsDes>${xmlEscape(input.destinationObservations ?? '')}</tem:strObsDes>
+      <tem:strContenido>${xmlEscape(input.content ?? '')}</tem:strContenido>
+    </${tag}>
+  </soapenv:Body>
+</soapenv:Envelope>`
+}
+
+export function parseGrabaRecogidaResponse(xml: string): TipsaCreatePickupResult {
+  const parsed = SHARED_PARSER.parse(xml)
+  const body = findFirstMatching(parsed, /^WebServService___GrabaRecogida\d*Response$/)
+  if (!body) {
+    throw makeError('GrabaRecogida response malformed: missing *Response node', xml)
+  }
+  const code = pick(body, 'strCodOut')
+  if (!code) {
+    throw makeError('GrabaRecogida response missing strCodOut', xml)
+  }
+  return {
+    code,
+    type: emptyToNull(pick(body, 'strTipoRecOut')),
+    originAgency: emptyToNull(pick(body, 'strCodAgeOriOut')),
+    destinationAgency: emptyToNull(pick(body, 'strCodAgeDesOut')),
+    guid: emptyToNull(pick(body, 'strGuidOut')),
+    reservedAlbaran: emptyToNull(pick(body, 'strCodEnvioReservadoOut')),
+    rawResponse: xml,
+  }
+}
+
+/** Sobre minimo de los metodos de recogida que solo piden el codigo. */
+function buildPickupCodeEnvelope(method: string, paramName: string, sessionId: string, code: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+  <soapenv:Header>
+    <tem:ROClientIDHeader>
+      <tem:ID>${xmlEscape(sessionId)}</tem:ID>
+    </tem:ROClientIDHeader>
+  </soapenv:Header>
+  <soapenv:Body>
+    <tem:WebServService___${method}>
+      <tem:${paramName}>${xmlEscape(code)}</tem:${paramName}>
+    </tem:WebServService___${method}>
+  </soapenv:Body>
+</soapenv:Envelope>`
+}
+
+export function buildConsRecEstadosEnvelope(sessionId: string, code: string): string {
+  return buildPickupCodeEnvelope('ConsRecEstados', 'strCodRec', sessionId, code)
+}
+
+export function buildConsRecogidaEnvelope(sessionId: string, code: string): string {
+  return buildPickupCodeEnvelope('ConsRecogida', 'strCod', sessionId, code)
+}
+
+export function buildConsRecIncidenciasEnvelope(sessionId: string, code: string): string {
+  return buildPickupCodeEnvelope('ConsRecIncidencias', 'strCodRec', sessionId, code)
+}
+
+export function buildBorraRecogidaEnvelope(sessionId: string, code: string): string {
+  return buildPickupCodeEnvelope('BorraRecogida', 'strCodRec', sessionId, code)
+}
+
+/** Historial de estados de la recogida. Mismo formato y codigos que ConsEnvEstados. */
+export function parseConsRecEstadosResponse(xml: string): TipsaShippingEvent[] {
+  const parsed = SHARED_PARSER.parse(xml)
+  const body = findFirst(parsed, 'WebServService___ConsRecEstadosResponse')
+  if (!body) {
+    throw makeError('ConsRecEstados response malformed', xml)
+  }
+  return parseEstadosCdata(pick(body, 'strRecEstados') ?? '', 'REC_ESTADOS')
+}
+
+/**
+ * Datos generales de la recogida. Lo que nos importa es V_COD_ENV: TIPSA lo
+ * rellena con el albaran del envio que genera al realizar la recogida, y es
+ * la unica senal fiable de que el material ya esta en camino.
+ */
+export function parseConsRecogidaResponse(xml: string): TipsaPickupInfo {
+  const parsed = SHARED_PARSER.parse(xml)
+  const body = findFirst(parsed, 'WebServService___ConsRecogidaResponse')
+  if (!body) {
+    throw makeError('ConsRecogida response malformed', xml)
+  }
+  const cdata = pick(body, 'strRecogida') ?? ''
+  const node = cdata.trim() ? firstCdataNode(cdata, 'RECOGIDAS') : null
+  if (!node) {
+    throw makeError('ConsRecogida response without RECOGIDAS node', xml)
+  }
+  const attrs = extractAttrs(node)
+  return {
+    code: attrs['V_COD'] ?? '',
+    albaran: emptyToNull(attrs['V_COD_ENV']),
+    rawAttributes: attrs,
+    rawResponse: xml,
+  }
+}
+
+/**
+ * Incidencias de la recogida (ausente, no tienen mercancia...). El CDATA es
+ *   <CONSULTA><REC_INCIDENCIAS><INC .../><ACT .../></REC_INCIDENCIAS></CONSULTA>
+ * Las ACT son actuaciones sobre la incidencia; aqui solo leemos las INC.
+ */
+export function parseConsRecIncidenciasResponse(xml: string): TipsaPickupIncidence[] {
+  const parsed = SHARED_PARSER.parse(xml)
+  const body = findFirst(parsed, 'WebServService___ConsRecIncidenciasResponse')
+  if (!body) {
+    throw makeError('ConsRecIncidencias response malformed', xml)
+  }
+  const cdata = pick(body, 'strRecIncidencias') ?? ''
+  if (!cdata.trim()) return []
+  const inner = findFirst(SHARED_PARSER.parse(cdata), 'REC_INCIDENCIAS')
+  if (!inner) return []
+  const nodes = inner.INC
+  const arr = Array.isArray(nodes) ? nodes : nodes ? [nodes] : []
+  return arr
+    .map((raw) => {
+      const attrs = extractAttrs(raw as Record<string, unknown>)
+      const code = attrs['V_COD_TIPO_INC'] ?? ''
+      return {
+        code,
+        label: tipsaPickupIncidenceLabel(code),
+        observations: emptyToNull(attrs['T_OBS']),
+        date: parseTipsaDate(attrs['D_FEC_HORA_ALTA'] ?? ''),
+        resolved: /^(true|1|s)$/i.test(attrs['B_RESUELTA'] ?? ''),
+        rawAttributes: attrs,
+      }
+    })
+    .filter((i) => i.code.length > 0)
+}
+
+/**
+ * BorraRecogida devuelve intCodErrorOut. La tabla del PDF v74.0 sale
+ * descolocada al extraerla; lo que se lee es 1 = la recogida no existe,
+ * 2 = sin permisos para borrarla, 3 = error desconocido. 0 o vacio = borrada.
+ */
+export const BORRA_RECOGIDA_ERRORS: Record<string, string> = {
+  '1': 'La recogida no existe en TIPSA',
+  '2': 'No tenemos permisos para anular esta recogida en TIPSA',
+  '3': 'TIPSA no ha podido anular la recogida (error desconocido)',
+}
+
+export function parseBorraRecogidaResponse(xml: string): { errorCode: string | null } {
+  const parsed = SHARED_PARSER.parse(xml)
+  const body =
+    findFirst(parsed, 'WebServService___BorraRecogidaResponse') ??
+    findFirst(parsed, 'WebServService___BorraRecogida')
+  if (!body) {
+    throw makeError('BorraRecogida response malformed', xml)
+  }
+  const code = (pick(body, 'intCodErrorOut') ?? '').trim()
+  return { errorCode: code === '' || code === '0' ? null : code }
+}
+
+// =========================================================
 // Helpers
 // =========================================================
+
+function findFirstMatching(root: unknown, pattern: RegExp): Record<string, unknown> | null {
+  if (!root || typeof root !== 'object') return null
+  const stack: unknown[] = [root]
+  while (stack.length > 0) {
+    const cur = stack.pop()
+    if (!cur || typeof cur !== 'object') continue
+    const obj = cur as Record<string, unknown>
+    for (const k of Object.keys(obj)) {
+      const v = obj[k]
+      if (pattern.test(k) && v && typeof v === 'object') return v as Record<string, unknown>
+      stack.push(v)
+    }
+  }
+  return null
+}
+
+function firstCdataNode(cdata: string, nodeName: string): Record<string, unknown> | null {
+  const found = findFirst(SHARED_PARSER.parse(cdata), nodeName)
+  // Si TIPSA devolviera varias filas, fast-xml-parser da un array: la primera.
+  if (Array.isArray(found)) return (found[0] as Record<string, unknown>) ?? null
+  return found
+}
+
+function emptyToNull(v: string | undefined): string | null {
+  const t = (v ?? '').trim()
+  return t ? t : null
+}
 
 function findFirst(root: unknown, tagName: string): Record<string, unknown> | null {
   if (!root || typeof root !== 'object') return null

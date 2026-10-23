@@ -159,6 +159,77 @@ export interface TipsaTrackingDeltasPage {
   rawResponse: string
 }
 
+// =========================================================
+// Recogidas (GrabaRecogida, ConsRecogida, ConsRecEstados...)
+// =========================================================
+
+export interface TipsaPickupParty {
+  name: string
+  address: string
+  city: string
+  cp: string
+  phone: string
+  /** strPersContacto (origen) / strObsDes no tiene contacto de destino en la v12. */
+  contactPerson?: string
+}
+
+export interface TipsaCreatePickupInput {
+  /** Dia de la recogida, YYYY-MM-DD (hora local Madrid). */
+  date: string
+  /** Inicio de la franja, HH:MM. */
+  timeFrom: string
+  /** Fin de la franja, HH:MM. */
+  timeTo: string
+  packages: number
+  weightKg: number
+  serviceCode: string
+  /** Donde se recoge: el cliente. */
+  origin: TipsaPickupParty
+  /** A donde se lleva: nuestro almacen o el SAT del proveedor. */
+  destination: TipsaPickupParty
+  /** strRef. Usamos el RC-YYYYMM-NNNN (y el RMA si viene de HSM). */
+  reference?: string
+  /** strObs: observaciones para el repartidor en origen. */
+  observations?: string
+  /** strObsDes: observaciones de destino. */
+  destinationObservations?: string
+  /** strContenido: que se recoge. */
+  content?: string
+}
+
+export interface TipsaCreatePickupResult {
+  /** strCodOut: codigo de la recogida en TIPSA. */
+  code: string
+  /** strTipoRecOut (N = normal en los ejemplos). */
+  type: string | null
+  originAgency: string | null
+  destinationAgency: string | null
+  /** strGuidOut */
+  guid: string | null
+  /** strCodEnvioReservadoOut: numero de envio reservado, si TIPSA lo asigna. */
+  reservedAlbaran: string | null
+  rawResponse: string
+}
+
+/** Datos generales de una recogida (ConsRecogida). */
+export interface TipsaPickupInfo {
+  code: string
+  /** V_COD_ENV: el envio que TIPSA genera al realizar la recogida. Null hasta entonces. */
+  albaran: string | null
+  rawAttributes: Record<string, string>
+  rawResponse: string
+}
+
+export interface TipsaPickupIncidence {
+  /** V_COD_TIPO_INC: AS, NTM, EI... */
+  code: string
+  label: string
+  observations: string | null
+  date: string // ISO UTC
+  resolved: boolean
+  rawAttributes: Record<string, string>
+}
+
 export interface TipsaConfig {
   env: TipsaEnv
   credentials: TipsaCredentials

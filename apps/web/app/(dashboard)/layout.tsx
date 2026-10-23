@@ -43,6 +43,13 @@ export default async function DashboardLayout({
     }
   }
 
+  // Recogidas pedidas (sobre todo desde HSM) que logistica aun no ha
+  // programado en TIPSA. Si la tabla aun no existe, error -> 0 sin romper.
+  const { count: pendingPickups } = await supabase
+    .from('pickups')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'solicitada')
+
   const displayName = profile?.full_name ?? user.email ?? 'Usuario'
   const displayRole = profile?.role ?? '—'
 
@@ -75,7 +82,7 @@ export default async function DashboardLayout({
 
         {/* Navigation */}
         <Suspense fallback={<div className="flex-1" />}>
-          <SidebarNav userEmail={profile?.email ?? user.email} userRole={profile?.role} badgeCounts={badgeCounts} totalNew={totalNew} />
+          <SidebarNav userEmail={profile?.email ?? user.email} userRole={profile?.role} badgeCounts={badgeCounts} totalNew={totalNew} pendingPickups={pendingPickups ?? 0} />
         </Suspense>
 
         {/* User info + logout */}

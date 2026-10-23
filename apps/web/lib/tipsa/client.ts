@@ -6,26 +6,43 @@
  */
 
 import {
+  BORRA_RECOGIDA_ERRORS,
+  GRABA_RECOGIDA_METHOD,
+  buildBorraRecogidaEnvelope,
   buildConsEnvEstadosEnvelope,
   buildConsEnvEstIncCambiosEstadosEnvelope,
   buildConsEtiquetaEnvelope,
+  buildConsRecEstadosEnvelope,
+  buildConsRecIncidenciasEnvelope,
+  buildConsRecogidaEnvelope,
   buildGrabaEnvio24Envelope,
+  buildGrabaRecogidaEnvelope,
   buildLoginEnvelope,
+  parseBorraRecogidaResponse,
   parseConsEnvEstadosResponse,
   parseConsEnvEstIncCambiosEstadosResponse,
   parseConsEtiquetaResponse,
+  parseConsRecEstadosResponse,
+  parseConsRecIncidenciasResponse,
+  parseConsRecogidaResponse,
   parseGrabaEnvioResponse,
+  parseGrabaRecogidaResponse,
   parseLoginResponse,
 } from './envelopes'
 import { TIPSA_URLS } from './services'
 import type {
   TipsaConfig,
+  TipsaCreatePickupInput,
+  TipsaCreatePickupResult,
   TipsaCreateShipmentInput,
   TipsaCreateShipmentResult,
   TipsaLabelFormat,
   TipsaLabelResult,
   TipsaLoginResult,
+  TipsaPickupIncidence,
+  TipsaPickupInfo,
   TipsaSession,
+  TipsaShippingEvent,
   TipsaTrackingDelta,
   TipsaTrackingResult,
 } from './types'
@@ -196,6 +213,98 @@ export async function fetchTrackingDeltas(
       page += 1
     }
     return all
+  })
+}
+
+// =========================================================
+// Recogidas
+// =========================================================
+
+/**
+ * Da de alta una recogida (GrabaRecogida). Si TIPSA la rechaza llega un SOAP
+ * Fault "codigo: descripcion" (p. ej. "12: El cliente no autoriza recogidas
+ * a su cargo"), que postSoap convierte en Error con ese texto.
+ */
+export async function createPickup(
+  config: TipsaConfig,
+  input: TipsaCreatePickupInput,
+): Promise<TipsaCreatePickupResult> {
+  return withSession(config, async (session) => {
+    const body = buildGrabaRecogidaEnvelope({
+      creds: config.credentials,
+      sessionId: session.id,
+      input,
+    })
+    const xml = await postSoap(
+      TIPSA_URLS[config.env].webserv,
+      body,
+      `urn:DinaPaq-WebServService#${GRABA_RECOGIDA_METHOD}`,
+    )
+    return parseGrabaRecogidaResponse(xml)
+  })
+}
+
+/** Historial de estados de una recogida (ConsRecEstados). */
+export async function fetchPickupEvents(
+  config: TipsaConfig,
+  code: string,
+): Promise<TipsaShippingEvent[]> {
+  return withSession(config, async (session) => {
+    const xml = await postSoap(
+      TIPSA_URLS[config.env].webserv,
+      buildConsRecEstadosEnvelope(session.id, code),
+      'urn:DinaPaq-WebServService#ConsRecEstados',
+    )
+    return parseConsRecEstadosResponse(xml)
+  })
+}
+
+/** Datos generales de una recogida, incluido el albaran generado (ConsRecogida). */
+export async function fetchPickupInfo(
+  config: TipsaConfig,
+  code: string,
+): Promise<TipsaPickupInfo> {
+  return withSession(config, async (session) => {
+    const xml = await postSoap(
+      TIPSA_URLS[config.env].webserv,
+      buildConsRecogidaEnvelope(session.id, code),
+      'urn:DinaPaq-WebServService#ConsRecogida',
+    )
+    return parseConsRecogidaResponse(xml)
+  })
+}
+
+/** Incidencias de una recogida (ConsRecIncidencias). */
+export async function fetchPickupIncidences(
+  config: TipsaConfig,
+  code: string,
+): Promise<TipsaPickupIncidence[]> {
+  return withSession(config, async (session) => {
+    const xml = await postSoap(
+      TIPSA_URLS[config.env].webserv,
+      buildConsRecIncidenciasEnvelope(session.id, code),
+      'urn:DinaPaq-WebServService#ConsRecIncidencias',
+    )
+    return parseConsRecIncidenciasResponse(xml)
+  })
+}
+
+/** Anula una recogida en TIPSA (BorraRecogida). Lanza Error si TIPSA no la borra. */
+export async function cancelPickup(config: TipsaConfig, code: string): Promise<void> {
+  return withSession(config, async (session) => {
+    const xml = await postSoap(
+      TIPSA_URLS[config.env].webserv,
+      buildBorraRecogidaEnvelope(session.id, code),
+      'urn:DinaPaq-WebServService#BorraRecogida',
+    )
+    const { errorCode } = parseBorraRecogidaResponse(xml)
+    if (errorCode) {
+      const err = new Error(
+        BORRA_RECOGIDA_ERRORS[errorCode] ?? `TIPSA no ha anulado la recogida (codigo ${errorCode})`,
+      ) as Error & { rawResponse: string }
+      err.rawResponse = xml
+      throw err
+    }
   })
 }
 
