@@ -9,8 +9,11 @@ confirmado las condiciones (sección «Lo que ha confirmado TIPSA», al final).
 Hoy, para que TIPSA recoja un equipo en casa de un cliente, hay que pedírselo a
 la comercial. Con esto:
 
-1. En **HSM**, desde un RMA con logística «Nosotros recogemos y enviamos», el
-   técnico pulsa **Pedir recogida a MainOps**.
+1. En **HSM**, desde cualquier RMA abierto, el técnico pulsa **Pedir
+   recogida**. No depende de la logística del RMA: aunque el proveedor «recoja
+   y envíe», casi siempre lo recoge en nuestra oficina, así que el equipo del
+   cliente lo recogemos nosotros igual. Sin destino elegido, va a nuestra
+   oficina.
 2. La petición llega a **MainOps** y aparece en *Logística → Recogidas* con un
    contador rojo. Logística la revisa y pulsa **Programar**: MainOps la da de
    alta en TIPSA (`GrabaRecogida`).
