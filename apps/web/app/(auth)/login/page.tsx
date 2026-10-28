@@ -1,71 +1,20 @@
-'use client'
+import { safeNextPath } from '@/lib/google-session'
+import { GoogleSignInButton } from './google-sign-in-button'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+// Errores que traen el middleware (sesión caducada o no válida) y el callback.
+const ERRORS: Record<string, string> = {
+  expired: 'Por seguridad, cada 7 días hay que volver a entrar con Google.',
+  invalid: 'Esa sesión no es válida. Entra con tu cuenta de Google @qamarero.com.',
+  google: 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.',
+}
 
-type Mode = 'login' | 'signup' | 'forgot'
+type Props = { searchParams: Promise<{ error?: string | string[]; next?: string | string[] }> }
 
-export default function LoginPage() {
-  const [mode, setMode] = useState<Mode>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    if (!email.endsWith('@qamarero.com')) {
-      setError('Solo se permiten cuentas @qamarero.com')
-      setLoading(false)
-      return
-    }
-
-    const supabase = createClient()
-
-    if (mode === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError(error.message === 'Invalid login credentials'
-        ? 'Email o contraseña incorrectos'
-        : error.message)
-      else window.location.href = '/orders'
-    }
-
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/api/auth/callback` },
-      })
-      if (error) {
-        setError(error.message.includes('already registered')
-          ? 'Este email ya tiene cuenta. Usa "Iniciar sesión".'
-          : error.message)
-      } else {
-        setSuccess('Revisa tu email para confirmar la cuenta.')
-      }
-    }
-
-    if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      })
-      if (error) setError(error.message)
-      else setSuccess('Email de recuperación enviado. Revisa tu bandeja.')
-    }
-
-    setLoading(false)
-  }
-
-  const titles: Record<Mode, string> = {
-    login:  'Iniciar sesión',
-    signup: 'Crear cuenta',
-    forgot: 'Recuperar contraseña',
-  }
+/** Solo se entra con Google (cuentas @qamarero.com del Workspace). */
+export default async function LoginPage({ searchParams }: Props) {
+  const params = await searchParams
+  const error = typeof params.error === 'string' && Object.hasOwn(ERRORS, params.error) ? ERRORS[params.error] : null
+  const next = safeNextPath(typeof params.next === 'string' ? params.next : null)
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -84,88 +33,19 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-gray-500">Hardware · Gestión de Pedidos</p>
           </div>
 
-          <h2 className="mb-6 text-center text-lg font-semibold text-gray-700">
-            {titles[mode]}
-          </h2>
+          <h2 className="mb-6 text-center text-lg font-semibold text-gray-700">Iniciar sesión</h2>
 
-          {/* Feedback */}
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+            <div role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
               {error}
             </div>
           )}
-          {success && (
-            <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-200">
-              {success}
-            </div>
-          )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Email <span className="text-gray-400">(@qamarero.com)</span>
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="nombre@qamarero.com"
-                required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              />
-            </div>
-
-            {mode !== 'forgot' && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Contraseña
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'Mínimo 8 caracteres' : '••••••••'}
-                  required
-                  minLength={mode === 'signup' ? 8 : undefined}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-                />
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? 'Un momento...' : titles[mode]}
-            </button>
-          </form>
-
-          {/* Navigation links */}
-          <div className="mt-5 flex flex-col items-center gap-2 text-sm">
-            {mode === 'login' && (
-              <>
-                <button onClick={() => { setMode('forgot'); setError(null); setSuccess(null) }}
-                  className="text-gray-500 hover:text-gray-900 hover:underline">
-                  ¿Olvidaste tu contraseña?
-                </button>
-                <button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
-                  className="text-gray-500 hover:text-gray-900 hover:underline">
-                  Crear cuenta nueva
-                </button>
-              </>
-            )}
-            {(mode === 'signup' || mode === 'forgot') && (
-              <button onClick={() => { setMode('login'); setError(null); setSuccess(null) }}
-                className="text-gray-500 hover:text-gray-900 hover:underline">
-                ← Volver a iniciar sesión
-              </button>
-            )}
-          </div>
+          <GoogleSignInButton next={next} />
 
           <p className="mt-5 text-center text-xs text-gray-400">
-            Acceso restringido al equipo de Qamarero.
+            Acceso restringido al equipo de Qamarero, con tu cuenta de Google @qamarero.com.
+            Por seguridad, se pide de nuevo cada 7 días.
           </p>
         </div>
       </div>

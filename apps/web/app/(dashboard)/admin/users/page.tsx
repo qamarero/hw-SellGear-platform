@@ -29,18 +29,15 @@ type EditingUser = {
   slack_user_id: string
 }
 
+/**
+ * Alta por adelantado: se crea la cuenta (sin contraseña) con su rol. Cuando la
+ * persona entre con su Google @qamarero.com, Supabase la enlaza por email.
+ */
 type NewUser = {
   email: string
-  password: string
   full_name: string
   role: UserRole
   department: string
-}
-
-/** Usuario al que se le está fijando una contraseña nueva desde el modal. */
-type PasswordTarget = {
-  id: string
-  email: string
 }
 
 /**
@@ -63,17 +60,10 @@ export default function AdminUsersPage() {
   const [creating, setCreating] = useState(false)
   const [newUser, setNewUser] = useState<NewUser>({
     email: '',
-    password: '',
     full_name: '',
     role: 'viewer',
     department: '',
   })
-  const [passwordTarget, setPasswordTarget] = useState<PasswordTarget | null>(null)
-  const [newPassword, setNewPassword] = useState('')
-  const [repeatPassword, setRepeatPassword] = useState('')
-  // El error del cambio de contraseña se pinta dentro del modal: el aviso
-  // general vive arriba de la tabla y el modal lo tapa.
-  const [passwordError, setPasswordError] = useState<string | null>(null)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -132,66 +122,6 @@ export default function AdminUsersPage() {
       showFeedback('success', 'Usuario actualizado correctamente')
     } catch (err) {
       showFeedback('error', err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleResetPassword = async (userId: string, email: string) => {
-    if (!confirm(`Se enviara un email de recuperacion a ${email}. ¿Continuar?`)) return
-
-    setActionLoading(userId)
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-
-      showFeedback('success', data.message)
-    } catch (err) {
-      showFeedback('error', err instanceof Error ? err.message : 'Error al enviar reset')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const closePasswordModal = () => {
-    setPasswordTarget(null)
-    setNewPassword('')
-    setRepeatPassword('')
-    setPasswordError(null)
-  }
-
-  const handleSetPassword = async () => {
-    if (!passwordTarget) return
-
-    if (newPassword.length < 6) {
-      setPasswordError('La contraseña debe tener al menos 6 caracteres')
-      return
-    }
-    if (newPassword !== repeatPassword) {
-      setPasswordError('Las dos contraseñas no coinciden')
-      return
-    }
-
-    setSaving(true)
-    setPasswordError(null)
-    try {
-      const res = await fetch(`/api/admin/users/${passwordTarget.id}/password`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: newPassword }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-
-      closePasswordModal()
-      showFeedback('success', data.message)
-    } catch (err) {
-      setPasswordError(
-        err instanceof Error ? err.message : 'Error al cambiar la contraseña'
-      )
     } finally {
       setSaving(false)
     }
@@ -258,8 +188,8 @@ export default function AdminUsersPage() {
   }
 
   const handleCreate = async () => {
-    if (!newUser.email || !newUser.password) {
-      showFeedback('error', 'Email y contraseña son obligatorios')
+    if (!newUser.email) {
+      showFeedback('error', 'El email es obligatorio')
       return
     }
     setSaving(true)
@@ -274,8 +204,8 @@ export default function AdminUsersPage() {
 
       setUsers((prev) => [data.user, ...prev])
       setCreating(false)
-      setNewUser({ email: '', password: '', full_name: '', role: 'viewer', department: '' })
-      showFeedback('success', `Usuario ${data.user.email} creado correctamente`)
+      setNewUser({ email: '', full_name: '', role: 'viewer', department: '' })
+      showFeedback('success', `Usuario ${data.user.email} creado: entrará con su cuenta de Google`)
     } catch (err) {
       showFeedback('error', err instanceof Error ? err.message : 'Error al crear usuario')
     } finally {
@@ -495,24 +425,6 @@ export default function AdminUsersPage() {
                         >
                           Editar
                         </button>
-                        <button
-                          onClick={() =>
-                            setPasswordTarget({ id: user.id, email: user.email ?? '' })
-                          }
-                          disabled={actionLoading === user.id}
-                          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                          title="Fijar una contraseña nueva ahora"
-                        >
-                          Contraseña
-                        </button>
-                        <button
-                          onClick={() => handleResetPassword(user.id, user.email ?? '')}
-                          disabled={actionLoading === user.id || !user.email}
-                          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
-                          title="Enviar email de reset de contrasena"
-                        >
-                          {actionLoading === user.id ? '...' : 'Reset pwd'}
-                        </button>
                         {user.deactivated ? (
                           <button
                             onClick={() =>
@@ -650,18 +562,10 @@ export default function AdminUsersPage() {
                 />
               </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Contraseña <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  placeholder="Minimo 6 caracteres"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-                />
-              </div>
+              <p className="text-xs text-gray-500">
+                No hace falta contraseña: entrará con su cuenta de Google @qamarero.com
+                y tendrá el rol que elijas aquí.
+              </p>
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -711,7 +615,7 @@ export default function AdminUsersPage() {
               <button
                 onClick={() => {
                   setCreating(false)
-                  setNewUser({ email: '', password: '', full_name: '', role: 'viewer', department: '' })
+                  setNewUser({ email: '', full_name: '', role: 'viewer', department: '' })
                 }}
                 disabled={saving}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
@@ -724,76 +628,6 @@ export default function AdminUsersPage() {
                 className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
               >
                 {saving ? 'Creando...' : 'Crear usuario'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Modal de cambio de contraseña */}
-      {passwordTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-900">Cambiar contraseña</h2>
-            <p className="mt-1 mb-4 text-sm text-gray-500">
-              {passwordTarget.email || 'Usuario sin email'}
-            </p>
-
-            {passwordError && (
-              <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
-                {passwordError}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Nueva contraseña <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Repetir contraseña <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder="La misma otra vez"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-                />
-              </div>
-
-              <p className="text-xs text-gray-500">
-                El usuario podrá entrar con ella de inmediato y la anterior deja de
-                servir. Las sesiones que ya tenga abiertas no se cierran, así que
-                cámbiala solo cuando te lo pida esa persona.
-              </p>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={closePasswordModal}
-                disabled={saving}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSetPassword}
-                disabled={saving}
-                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Guardando...' : 'Cambiar contraseña'}
               </button>
             </div>
           </div>

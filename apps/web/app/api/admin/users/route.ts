@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminUser } from '@/lib/auth'
+import { ALLOWED_EMAIL } from '@/lib/google-session'
 import type { UserRole } from '@/types/database'
 
 const VALID_ROLES: UserRole[] = ['viewer', 'commercial', 'hardware', 'manager', 'admin']
@@ -78,20 +79,14 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { email, password, full_name, role, department } = body
+  const { full_name, role, department } = body
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
 
-  if (!email || !password) {
-    return NextResponse.json(
-      { error: 'Email y contraseña son obligatorios' },
-      { status: 400 }
-    )
-  }
-
-  if (password.length < 6) {
-    return NextResponse.json(
-      { error: 'La contraseña debe tener al menos 6 caracteres' },
-      { status: 400 }
-    )
+  // Solo se entra con Google: la cuenta se crea sin contraseña y, cuando la
+  // persona entre con su Google @qamarero.com, Supabase la enlaza por email y
+  // conserva el rol asignado aquí.
+  if (!ALLOWED_EMAIL.test(email)) {
+    return NextResponse.json({ error: 'Solo cuentas @qamarero.com' }, { status: 400 })
   }
 
   if (role && !VALID_ROLES.includes(role)) {
@@ -103,7 +98,6 @@ export async function POST(request: NextRequest) {
   // Crear usuario en auth
   const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
     email,
-    password,
     email_confirm: true,
     user_metadata: { full_name: full_name || null },
   })

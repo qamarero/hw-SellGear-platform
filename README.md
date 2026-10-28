@@ -56,9 +56,15 @@ pnpm dlx supabase db push
 
 ### 3. Auth Google — Supabase Dashboard
 
-1. Supabase → Authentication → Providers → Google
-2. Habilitar y añadir `Client ID` + `Client Secret` de Google Cloud Console
-3. Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
+Solo se entra con Google (cuentas @qamarero.com): sin contraseñas ni registro.
+Ver `docs/ADR-2026-10-28-login-solo-google.md`.
+
+1. Supabase → Authentication → Providers → Google: habilitado con el cliente
+   «Supabase Main-Ops» del proyecto de Google Cloud **Qamarero Toolbox**
+   (audiencia *Internal*). Su redirect URI es
+   `https://<project-ref>.supabase.co/auth/v1/callback`.
+2. Authentication → URL Configuration → Redirect URLs: los dominios de la app
+   (`/**`) y `http://localhost:3000/**`. La app vuelve a `/api/auth/callback`.
 
 ### 4. App web
 
